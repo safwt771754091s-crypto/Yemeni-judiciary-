@@ -232,3 +232,26 @@ def test_render_markdown_is_pure(seeded_store=None):
     markdown = render_markdown(envelope)
     assert "الديباجة" in markdown and "المنطوق" in markdown
     assert "أ" in markdown and "ب" in markdown
+
+
+def test_split_ignores_inline_cross_references():
+    """A mid-sentence «المادة (N)» is a cross-reference, not a new article.
+
+    Treating it as a heading produced two chunks for the same article number, so
+    a citation could resolve to the wrong text.
+    """
+    from app.core.text_utils import split_into_articles
+
+    text = (
+        "المادة (22) لا يجوز التصرف إلا وفقاً لأحكام المادة (23) من هذا القانون.\n\n"
+        "المادة (23) يُشترط لصحة التصرف أهلية المتصرف.\n\n"
+        "المادة (24) تُثبت الولاية بالحكم القضائي."
+    )
+    pairs = split_into_articles(text)
+    numbers = [n for n, _ in pairs if n]
+    assert numbers == ["22", "23", "24"], numbers
+
+    # Article 22 keeps its own body and must not be truncated at the reference.
+    body_22 = next(b for n, b in pairs if n == "22")
+    assert "وفقاً لأحكام المادة (23)" in body_22
+    assert "أهلية المتصرف" not in body_22

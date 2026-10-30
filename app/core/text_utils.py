@@ -25,6 +25,14 @@ _WHITESPACE = re.compile(r"\s+")
 ARTICLE_RE = re.compile(
     r"(?:المادة|مادة|م\.)\s*[\(\[]?\s*([0-9\u0660-\u0669]{1,5})\s*[\)\]]?\s*(?:مكرر(?:اً|ا)?)?",
 )
+# An article *heading* starts a line; a cross-reference such as
+# «وفقاً لأحكام المادة (23) من هذا القانون» sits mid-line and must NOT start a
+# new article, otherwise the same number yields two chunks and a citation can
+# resolve to the wrong text.
+ARTICLE_HEADING_RE = re.compile(
+    r"^[^\S\n]*(?:المادة|مادة)\s*[\(\[]?\s*([0-9\u0660-\u0669]{1,5})\s*[\)\]]?\s*(?:مكرر(?:اً|ا)?)?",
+    re.MULTILINE,
+)
 CHAPTER_RE = re.compile(r"^\s*(?:الباب|الفصل|القسم|الفرع)\s+[^\n]{0,120}$", re.MULTILINE)
 
 
@@ -62,11 +70,16 @@ def extract_article_numbers(text: str) -> list[str]:
 def split_into_articles(text: str) -> list[tuple[str | None, str]]:
     """Split a Yemeni legal code into (article_number, article_body) pairs.
 
+    Only line-start markers count as article headings. Mid-line mentions such as
+    «وفقاً لأحكام المادة (23) من هذا القانون» are cross-references, not new
+    articles; treating them as headings produced duplicate chunks for the same
+    article number.
+
     Falls back to a single (None, whole_text) pair when no article markers are
     found, which keeps free-form documents ingestible.
     """
     normalised = text.replace("\u00a0", " ")
-    matches = list(ARTICLE_RE.finditer(normalised))
+    matches = list(ARTICLE_HEADING_RE.finditer(normalised))
     if not matches:
         stripped = normalised.strip()
         return [(None, stripped)] if stripped else []

@@ -132,7 +132,7 @@ python scripts/apply_sql.py          # ينفّذ 001 ثم 002 عبر SUPABASE_D
 ### 3.4 إدخال المدونة القانونية اليمنية
 
 ```bash
-python scripts/seed_corpus.py        # المدونة التجريبية المرفقة (4 قوانين)
+python scripts/seed_corpus.py --file app/data/corpus/yemeni_laws_full.json   # المدونة الرسمية
 python scripts/seed_corpus.py --dry-run   # تقطيع فقط دون كتابة
 ```
 
@@ -373,12 +373,15 @@ ruff check app scripts tests
 │   ├── llm/                        # embeddings, provider, prompts, chains, validator
 │   ├── schemas/                    # common, legal, case, judgment
 │   ├── services/                   # ingestion, retrieval, evidence, judgment, pipeline, n8n
-│   └── data/samples/               # مدونة يمنية تجريبية
+│   └── data/
+│       ├── samples/                # مدونة تجريبية (للاختبار الآلي فقط)
+│       └── corpus/                 # المدونة الرسمية الكاملة (16 قانوناً، 5128 مادة)
 ├── sql/
 │   ├── 001_init_pgvector.sql       # الجداول والفهارس (HNSW, GIN, trigram)
 │   └── 002_functions.sql           # match_legal_articles, normalize_arabic, upsert...
 ├── scripts/
 │   ├── seed_corpus.py              # إدخال المدونة القانونية
+│   ├── build_corpus_from_packs.py  # بناء المدونة الرسمية من نصوص القوانين
 │   └── apply_sql.py                # تنفيذ مخطط SQL
 ├── n8n/legal_case_workflow.json    # سير عمل جاهز
 ├── tests/                          # 33 اختباراً
@@ -388,7 +391,53 @@ ruff check app scripts tests
 
 ---
 
-## 10. استبدال المدونة التجريبية بالرسمية
+## 10. المدونة القانونية
+
+### المدونة الرسمية (مُضمَّنة في المستودع)
+
+`app/data/corpus/yemeni_laws_full.json` — **16 قانوناً يمنياً، 5128 مادة** من النصوص
+الرسمية، جاهزة للإدخال:
+
+```bash
+python scripts/seed_corpus.py --file app/data/corpus/yemeni_laws_full.json
+```
+
+| القانون | رقمه/سنته | المواد |
+|---|---|---|
+| الدستور (المعدل 2001م) | — | 162 |
+| القانون المدني | 14/2002 | 1393 |
+| قانون الجرائم والعقوبات | 12/1994 | 325 |
+| قانون الإجراءات الجزائية | 13/1994 | 567 |
+| قانون الأحوال الشخصية | 20/1992 | 351 |
+| قانون الإثبات | 21/1992 | 179 |
+| قانون المرافعات والتنفيذ المدني | 40/2002 | 504 |
+| القانون التجاري | 32/1991 | 829 |
+| قانون الشركات التجارية | 22/1997 | 300 |
+| قانون العمل | 5/1995 | 163 |
+| قانون التحكيم | 22/1992 | 62 |
+| السجل التجاري · الأسماء التجارية · العلامات التجارية | 33/1991 · 20/2003 · 23/2010 | 129 |
+| الخدمة المدنية · التأمين الإلزامي | 19/1991 · 30/1991 | 164 |
+
+**المصدر:** مجموعة القوانين اليمنية (`yemeni-laws`)، وهي نصوص مواد مُرقَّمة مع بيانات
+التعديلات. الدستور المُضمَّن هو **نسخة 2001 المعدَّلة** (مدة الرئاسة سبع سنوات، المادة 112).
+
+لإعادة بناء الملف أو التوسّع إلى القوانين الـ413 كلها:
+
+```bash
+python scripts/build_corpus_from_packs.py --packs-dir ./packs --laws ./laws.json
+python scripts/build_corpus_from_packs.py --packs-dir ./packs --laws ./laws.json --all-laws
+```
+
+> **تنبيه:** يجب مقابلة النصوص على **الجريدة الرسمية** قبل الاعتماد عليها في حكم نهائي.
+> الملف يحمل `source_url` لكل قانون لتسهيل المراجعة.
+
+### المدونة التجريبية
+
+`app/data/samples/yemeni_laws_seed.json` تبقى **للاختبار الآلي فقط** (سريعة، بلا شبكة).
+
+### استبدالها بمدونة أخرى
+
+قبل الاستخدام الفعلي أدخل النصوص الرسمية الكاملة بنفس الصيغة:
 
 الملف `app/data/samples/yemeni_laws_seed.json` **مدونة تجريبية** للاختبار فقط.
 قبل الاستخدام الفعلي أدخل النصوص الرسمية الكاملة للقوانين اليمنية بنفس الصيغة:
