@@ -1,0 +1,30 @@
+# ---------------------------------------------------------------------------
+# Core runtime (required for the API + RAG engine to run)
+# ---------------------------------------------------------------------------
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.4
+pydantic-settings==2.7.0
+python-multipart==0.0.20
+httpx==0.28.1
+asyncpg==0.30.0
+numpy==2.2.1
+python-dotenv==1.0.1
+tenacity==9.0.0
+
+# ---------------------------------------------------------------------------
+# LLM / RAG stack (LangChain + LlamaIndex)
+# Install these for real OpenAI / Anthropic providers. The engine degrades
+# gracefully to a deterministic offline provider when they are absent.
+# ---------------------------------------------------------------------------
+langchain-core==0.3.28
+langchain-text-splitters==0.3.4
+langchain-openai==0.2.14
+langchain-anthropic==0.3.1
+llama-index-core==0.12.11
+llama-index-vector-stores-postgres==0.4.0
+llama-index-embeddings-openai==0.3.1
+llama-index-llms-openai==0.3.14
+openai==1.59.6
+anthropic==0.42.0
+tiktoken==0.8.0

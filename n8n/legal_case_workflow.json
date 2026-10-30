@@ -1,0 +1,113 @@
+{
+  "name": "Yemeni Legal AI - Case to Judgment Pipeline",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "webhook-in",
+      "name": "Webhook: Case Submitted",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "legal-case-submit",
+      "notes": "Receives a case payload from the court intake form / e-filing system."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalise the incoming payload into the /cases/submit contract.\nconst body = $json.body ?? $json;\nreturn [{ json: {\n  case_number: body.case_number ?? null,\n  case_type: body.case_type ?? 'مدني',\n  court_name: body.court_name ?? 'المحكمة الابتدائية',\n  judge_name: body.judge_name ?? null,\n  subject_matter: body.subject_matter,\n  claim_value: body.claim_value ?? null,\n  currency: body.currency ?? 'YER',\n  facts_summary: body.facts_summary ?? null,\n  plaintiff: body.plaintiff,\n  defendant: body.defendant,\n  plaintiff_claims: body.plaintiff_claims ?? [],\n  defendant_responses: body.defendant_responses ?? [],\n  evidence: body.evidence ?? [],\n  generate_judgment: true,\n  language: 'ar',\n} }];"
+      },
+      "id": "normalise",
+      "name": "Normalise Case Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.LEGAL_AI_BASE_URL}}/api/v1/cases/submit",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "X-N8N-Secret", "value": "={{$env.LEGAL_AI_N8N_SECRET}}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": { "timeout": 180000 }
+      },
+      "id": "submit-case",
+      "name": "Legal AI: Submit Case",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [700, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" },
+          "conditions": [
+            {
+              "leftValue": "={{$json.grounding_score}}",
+              "rightValue": 0.5,
+              "operator": { "type": "number", "operation": "gte" }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "grounding-check",
+      "name": "Grounding Sufficient?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [940, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.LEGAL_AI_BASE_URL}}/api/v1/cases/{{$json.case.id}}/judgments/{{$json.judgment_id}}/approve",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [{ "name": "decision", "value": "approved" }]
+        },
+        "options": {}
+      },
+      "id": "queue-review",
+      "name": "Queue for Judge Review",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1180, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.LEGAL_AI_BASE_URL}}/api/v1/ingestion/text",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ document: { source_type: 'other', title_ar: 'مواد مطلوبة - ' + $json.case.id }, text: $json.warnings.join('\\n') }) }}",
+        "options": {}
+      },
+      "id": "flag-gaps",
+      "name": "Flag Missing Legal Sources",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1180, 420]
+    }
+  ],
+  "connections": {
+    "Webhook: Case Submitted": { "main": [[{ "node": "Normalise Case Payload", "type": "main", "index": 0 }]] },
+    "Normalise Case Payload": { "main": [[{ "node": "Legal AI: Submit Case", "type": "main", "index": 0 }]] },
+    "Legal AI: Submit Case": { "main": [[{ "node": "Grounding Sufficient?", "type": "main", "index": 0 }]] },
+    "Grounding Sufficient?": {
+      "main": [
+        [{ "node": "Queue for Judge Review", "type": "main", "index": 0 }],
+        [{ "node": "Flag Missing Legal Sources", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "meta": {
+    "description": "Imports a submitted case, calls the Legal AI reasoning engine, routes drafts with sufficient statutory grounding to judge review, and flags cases where the legal corpus is incomplete."
+  }
+}

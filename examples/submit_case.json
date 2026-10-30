@@ -1,0 +1,60 @@
+{
+  "case_number": "1445/2026",
+  "case_type": "مدني",
+  "court_name": "المحكمة الابتدائية - صنعاء",
+  "circuit": "الدائرة المدنية الأولى",
+  "judge_name": "القاضي/ محمد الحميري",
+  "subject_matter": "المطالبة بسداد ثمن مبيع والتعويض عن التأخر",
+  "claim_value": 3500000,
+  "currency": "YER",
+  "facts_summary": "اتفق المدعي والمدعى عليه على بيع سيارة بثمن محدد، وسلّم المدعي السيارة وتأخر المدعى عليه عن السداد دون سبب مشروع.",
+  "plaintiff": { "name": "أحمد عبدالله ناصر", "role": "plaintiff", "address": "صنعاء" },
+  "defendant": { "name": "صالح محمد المقطري", "role": "defendant", "address": "صنعاء" },
+  "plaintiff_claims": [
+    {
+      "title": "إلزام المدعى عليه بأداء الثمن",
+      "description": "إلزام المدعى عليه بسداد الثمن المتفق عليه",
+      "amount": 3500000,
+      "currency": "YER",
+      "relief_sought": "الحكم بإلزام المدعى عليه بأداء الثمن",
+      "legal_basis": ["المادة 146", "المادة 147"]
+    },
+    {
+      "title": "التعويض عن التأخر",
+      "description": "التعويض عن الضرر اللاحق بالمدعي جراء التأخر في السداد",
+      "amount": 200000,
+      "currency": "YER",
+      "legal_basis": ["المادة 191"]
+    }
+  ],
+  "defendant_responses": [
+    {
+      "claim_ref": "إلزام المدعى عليه بأداء الثمن",
+      "response_type": "denial",
+      "description": "ينكر المدعى عليه وجود عيوب خفية في المبيع",
+      "legal_basis": ["المادة 15"]
+    }
+  ],
+  "evidence": [
+    {
+      "id": "ev-1",
+      "submitted_by": "plaintiff",
+      "evidence_type": "contract",
+      "title": "عقد البيع",
+      "description": "عقد موقّع من الطرفين يحدد الثمن وطريقة السداد",
+      "document_ref": "storage://evidence/contract_1445.pdf",
+      "extracted_text": "عقد بيع سيارة بثمن محدد، يلتزم المشتري بالسداد خلال ثلاثين يوماً."
+    },
+    {
+      "id": "ev-2",
+      "submitted_by": "defendant",
+      "evidence_type": "digital",
+      "title": "محادثات واتساب",
+      "description": "محادثات بين الطرفين",
+      "document_ref": "storage://evidence/chat_1445.txt"
+    }
+  ],
+  "generate_judgment": true,
+  "language": "ar",
+  "max_retrieved_articles": 10
+}
