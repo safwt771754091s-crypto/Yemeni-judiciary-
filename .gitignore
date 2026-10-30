@@ -1,0 +1,21 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+.env.local
+*.log
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+var/
+uploads/
+*.egg-info/
+dist/
+build/
+.idea/
+.vscode/
+.DS_Store
+
+# Agent working memory (local only)
+.openhands/
