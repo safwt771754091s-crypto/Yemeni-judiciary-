@@ -45,6 +45,11 @@ class IngestionError(LegalAIError):
     code = "ingestion_error"
 
 
+class PayloadTooLargeError(LegalAIError):
+    status_code = 413
+    code = "payload_too_large"
+
+
 class GroundingError(LegalAIError):
     """Raised when generated legal reasoning cannot be grounded in real statutes."""
 

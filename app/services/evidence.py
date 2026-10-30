@@ -157,7 +157,7 @@ class EvidenceService:
         for base in baseline:
             llm = llm_by_title.get(base["title"], {})
             weight = base["weight"]
-            if isinstance(llm.get("weight"), (int, float)):
+            if isinstance(llm.get("weight"), int | float):
                 # average keeps the deterministic floor in play
                 weight = round((float(llm["weight"]) + base["weight"]) / 2, 3)
             admissibility = base["admissibility"]

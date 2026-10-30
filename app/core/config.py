@@ -49,7 +49,6 @@ class Settings(BaseSettings):
     vector_weight: float = 0.65
     keyword_weight: float = 0.35
     rrf_k: int = 60
-    min_citation_score: float = 0.18
 
     # --- legal defaults ---
     jurisdiction: str = "الجمهورية اليمنية"
@@ -63,7 +62,6 @@ class Settings(BaseSettings):
 
     # --- uploads ---
     max_upload_mb: int = 25
-    upload_dir: str = "./var/uploads"
 
     @field_validator("llm_api_key", "n8n_hmac_secret", mode="before")
     @classmethod

@@ -10,7 +10,8 @@ from __future__ import annotations
 from fastapi import APIRouter, File, Form, UploadFile, status
 
 from app.api.deps import IngestionDep
-from app.core.errors import IngestionError
+from app.core.config import settings
+from app.core.errors import IngestionError, PayloadTooLargeError
 from app.core.logging import get_logger
 from app.schemas.common import SOURCE_LABELS_AR, LegalSourceType
 from app.schemas.legal import (
@@ -64,7 +65,14 @@ async def ingest_upload(
     promulgation_year: int | None = Form(default=None),
     issuing_authority: str = Form(default="مجلس النواب"),
 ) -> IngestResponse:
-    raw = await file.read()
+    limit_bytes = settings.max_upload_mb * 1024 * 1024
+    # Read one byte past the limit so an oversized upload is detected without
+    # buffering an unbounded body into memory.
+    raw = await file.read(limit_bytes + 1)
+    if len(raw) > limit_bytes:
+        raise PayloadTooLargeError(
+            f"حجم الملف يتجاوز الحد الأقصى المسموح ({settings.max_upload_mb} ميجابايت)"
+        )
     try:
         text = raw.decode("utf-8")
     except UnicodeDecodeError:

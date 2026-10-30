@@ -44,6 +44,18 @@ class N8NClient:
         expected = self.sign(body)
         return hmac.compare_digest(expected, signature or "")
 
+    def verify_secret(self, presented: str | None) -> bool:
+        """Check the shared secret an inbound caller presents (``X-N8N-Secret``).
+
+        n8n sends the configured shared secret verbatim, so this is a plain
+        constant-time comparison - not an HMAC of the request body. When no
+        secret is configured the header is not enforced, which keeps local
+        development and the direct REST API usable without n8n.
+        """
+        if not self.secret:
+            return True
+        return hmac.compare_digest(self.secret, presented or "")
+
     async def emit(self, event: str, payload: dict[str, Any]) -> bool:
         if not self.enabled:
             logger.debug("n8n disabled; skipping event", extra={"event": event})

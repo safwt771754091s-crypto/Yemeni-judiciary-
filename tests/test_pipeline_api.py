@@ -114,6 +114,20 @@ async def test_ingestion_and_stats_over_http(client):
     assert stats.json()["total_articles"] >= 2
 
 
+async def test_ingestion_upload_rejects_oversized_file(client, monkeypatch):
+    from app.api.v1.routes import ingestion as ingestion_route
+
+    monkeypatch.setattr(ingestion_route.settings, "max_upload_mb", 1)
+    oversized = "المادة (1) ".encode() + b"x" * (1024 * 1024 + 10)
+
+    response = await client.post(
+        "/api/v1/ingestion/upload",
+        files={"file": ("big.txt", oversized, "text/plain")},
+        data={"source_type": "civil_law", "title_ar": "قانون كبير"},
+    )
+    assert response.status_code == 413, response.text
+
+
 async def test_retrieval_endpoint_over_http(seeded_store, client):
     response = await client.post(
         "/api/v1/retrieval/search",
@@ -155,6 +169,44 @@ async def test_case_and_judgment_retrieval_endpoints(seeded_store, sample_case_p
 async def test_missing_case_returns_404(client):
     response = await client.get("/api/v1/cases/00000000-0000-0000-0000-000000000000")
     assert response.status_code == 404
+
+
+async def test_case_identity_fields_override_model_output(sample_case_payload):
+    """Party names and court must come from the case file, never the model.
+
+    A loose generation that names the wrong party must not survive into the
+    draft: the case file is the authoritative record.
+    """
+    from app.services.judgment import judgment_service
+
+    case = CaseSubmissionRequest.model_validate(sample_case_payload).model_dump(mode="json")
+    case["plaintiff_name"] = "أحمد عبدالله ناصر"
+    case["defendant_name"] = "صالح محمد المقطري"
+    draft = judgment_service._coerce_draft(
+        {
+            "preamble": {
+                "court_name": "محكمة خاطئة",
+                "plaintiff": {"name": "طرف آخر"},
+                "defendant": {"name": "طرف ثالث"},
+            }
+        },
+        case,
+    )
+    assert draft.preamble.plaintiff["name"] == "أحمد عبدالله ناصر"
+    assert draft.preamble.defendant["name"] == "صالح محمد المقطري"
+    assert draft.preamble.court_name == case["court_name"]
+
+
+async def test_markdown_has_no_prompt_scaffolding(seeded_store, sample_case_payload):
+    """The rendered draft must never leak the prompt's block labels as text."""
+    request = CaseSubmissionRequest.model_validate(sample_case_payload)
+    response = await case_pipeline.submit(request)
+    markdown = response.judgment_markdown or ""
+
+    assert "أحمد عبدالله ناصر" in markdown
+    assert "صالح محمد المقطري" in markdown
+    for leak in ("وردود المدعى عليه والوقائع غير المتنازع عليها", "وتاريخ الجلسة وبيانات الطرفين"):
+        assert leak not in markdown, f"prompt scaffolding leaked into the draft: {leak}"
 
 
 def test_render_markdown_is_pure(seeded_store=None):

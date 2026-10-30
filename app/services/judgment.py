@@ -100,10 +100,18 @@ class JudgmentService:
             ("subject_matter", case.get("subject_matter")),
         ):
             preamble[key] = value
-        if not isinstance(preamble.get("plaintiff"), dict) or not preamble["plaintiff"].get("name"):
-            preamble["plaintiff"] = {"name": case.get("plaintiff_name")}
-        if not isinstance(preamble.get("defendant"), dict) or not preamble["defendant"].get("name"):
-            preamble["defendant"] = {"name": case.get("defendant_name")}
+        # Party names are identity fields: the case file is authoritative, so the
+        # model's value is overwritten rather than merely used as a fallback.
+        # A loose generation must never be able to attribute the draft to a
+        # different party than the one on the case file.
+        preamble["plaintiff"] = {
+            **(preamble.get("plaintiff") if isinstance(preamble.get("plaintiff"), dict) else {}),
+            "name": case.get("plaintiff_name"),
+        }
+        preamble["defendant"] = {
+            **(preamble.get("defendant") if isinstance(preamble.get("defendant"), dict) else {}),
+            "name": case.get("defendant_name"),
+        }
         payload["preamble"] = preamble
 
         facts = payload.get("facts") if isinstance(payload.get("facts"), dict) else {}
@@ -192,6 +200,14 @@ def _money(amount: Any, currency: str | None) -> str:
         return str(amount)
 
 
+def _party_name(value: Any) -> str | None:
+    """Extract a party name whether the draft stored a string or a dict."""
+    if isinstance(value, dict):
+        name = value.get("name")
+        return str(name).strip() if name else None
+    return str(value).strip() if value else None
+
+
 def render_markdown(envelope: JudgmentDraftEnvelope, case: dict[str, Any] | None = None) -> str:
     """Render the structured draft as a formal Yemeni judgment (مسودة حكم)."""
     d = envelope.draft
@@ -223,8 +239,8 @@ def render_markdown(envelope: JudgmentDraftEnvelope, case: dict[str, Any] | None
         lines.append(" — ".join(meta_bits) + ".")
     if p.judge_name:
         lines.append(f"برئاسة القاضي: {p.judge_name}.")
-    plaintiff = p.plaintiff.get("name") if isinstance(p.plaintiff, dict) else p.plaintiff
-    defendant = p.defendant.get("name") if isinstance(p.defendant, dict) else p.defendant
+    plaintiff = _party_name(p.plaintiff) or (case or {}).get("plaintiff_name")
+    defendant = _party_name(p.defendant) or (case or {}).get("defendant_name")
     lines.append(f"المدعي: {plaintiff or '—'}.")
     lines.append(f"المدعى عليه: {defendant or '—'}.")
     if p.attendance:

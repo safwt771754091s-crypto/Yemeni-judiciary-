@@ -347,7 +347,7 @@ LEGAL_AI_N8N_SECRET=<نفس N8N_HMAC_SECRET>
 
 ```bash
 pip install -r requirements-dev.txt
-pytest -q            # 26 اختباراً، بلا شبكة وبلا قاعدة بيانات
+pytest -q            # 33 اختباراً، بلا شبكة وبلا قاعدة بيانات
 ruff check app scripts tests
 ```
 
@@ -381,7 +381,7 @@ ruff check app scripts tests
 │   ├── seed_corpus.py              # إدخال المدونة القانونية
 │   └── apply_sql.py                # تنفيذ مخطط SQL
 ├── n8n/legal_case_workflow.json    # سير عمل جاهز
-├── tests/                          # 26 اختباراً
+├── tests/                          # 33 اختباراً
 ├── Dockerfile · docker-compose.yml · Makefile · requirements.txt
 └── .env.example
 ```

@@ -7,6 +7,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
+from app.core.config import settings
 from app.schemas.common import (
     Admissibility,
     EvidenceStrength,
@@ -104,8 +105,11 @@ class CaseSubmissionRequest(BaseModel):
     """POST /api/v1/cases/submit payload."""
 
     case_number: str | None = Field(default=None, max_length=120)
-    case_type: str = Field(default="مدني", description="مدني|تجاري|جنائي|أسري|عمالي|إداري")
-    court_name: str = "المحكمة الابتدائية"
+    case_type: str = Field(
+        default_factory=lambda: settings.default_case_type,
+        description="مدني|تجاري|جنائي|أسري|عمالي|إداري",
+    )
+    court_name: str = Field(default_factory=lambda: settings.default_court_name)
     circuit: str | None = None
     judge_name: str | None = None
     subject_matter: str = Field(min_length=2, description="موضوع الدعوى")

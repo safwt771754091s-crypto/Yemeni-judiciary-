@@ -297,11 +297,11 @@ def _mock_reasoning(prompt: str, articles: list[dict[str, Any]]) -> dict[str, An
 
 
 def _mock_judgment(prompt: str, articles: list[dict[str, Any]]) -> dict[str, Any]:
-    case_number = _first_match(prompt, r"رقم القضية[:：]?\s*([^\n]+)") or None
-    plaintiff = _first_match(prompt, r"المدعي[:：]?\s*([^\n]+)") or "المدعي"
-    defendant = _first_match(prompt, r"المدعى عليه[:：]?\s*([^\n]+)") or "المدعى عليه"
-    subject = _first_match(prompt, r"موضوع الدعوى[:：]?\s*([^\n]+)") or "موضوع الدعوى"
-    court = _first_match(prompt, r"(?:اسم\s+)?المحكمة[:：]?\s*([^\n]+)") or settings.default_court_name
+    case_number = _case_field(prompt, "رقم القضية")
+    plaintiff = _case_field(prompt, "المدعي") or "المدعي"
+    defendant = _case_field(prompt, "المدعى عليه") or "المدعى عليه"
+    subject = _case_field(prompt, "موضوع الدعوى") or "موضوع الدعوى"
+    court = _case_field(prompt, "المحكمة") or settings.default_court_name
     basis = [a["article_label"] for a in articles[:3]] or ["المواد القانونية المسترجعة"]
     return {
         "preamble": {
@@ -347,9 +347,19 @@ def _mock_judgment(prompt: str, articles: list[dict[str, Any]]) -> dict[str, Any
     }
 
 
-def _first_match(text: str, pattern: str) -> str | None:
-    match = re.search(pattern, text)
-    return match.group(1).strip() if match else None
+def _case_field(prompt: str, label: str) -> str | None:
+    """Read a `label: value` line emitted by ``build_case_block``.
+
+    Anchored to the line start so a label such as «المحكمة» cannot match an
+    occurrence of the same word inside prose further down the prompt, and the
+    value cannot run past the end of the line.
+    """
+    pattern = rf"^[^\S\n]*(?:-[ ]+)?{re.escape(label)}[:：][^\S\n]*(.+)$"
+    match = re.search(pattern, prompt, re.MULTILINE)
+    if not match:
+        return None
+    value = match.group(1).strip()
+    return value or None
 
 
 # ---------------------------------------------------------------------------
