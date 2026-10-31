@@ -62,6 +62,16 @@ class RetrievedArticle(BaseModel):
     fused_score: float = 0.0
     vector_rank: int | None = None
     keyword_rank: int | None = None
+    source_url: str | None = Field(
+        default=None, description="رابط المصدر الرسمي للنص"
+    )
+    text_quality: str | None = Field(
+        default=None,
+        description="جودة النص: high (نص رسمي منسوخ) أو medium/low (مستخرج آلياً من نسخة ممسوحة)",
+    )
+    verbatim: bool | None = Field(
+        default=None, description="هل النص منقول حرفياً عن المصدر الرسمي"
+    )
 
     @property
     def citation(self) -> str:

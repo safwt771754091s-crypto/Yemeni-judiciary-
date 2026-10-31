@@ -55,3 +55,36 @@ async def test_retrieval_returns_empty_when_corpus_is_empty():
         top_k=5,
     )
     assert results == []
+
+
+async def test_cited_article_is_looked_up_by_number_not_similarity(seeded_store):
+    """A cited article must be fetched exactly, whatever the embedder scores.
+
+    Regression: pinning used to run a semantic search for the literal string
+    "المادة 146", which the hash embedder cannot rank reliably over a full
+    corpus, so a party's own cited provision could silently go missing.
+    """
+    store = seeded_store.store
+    found = await store.find_by_article_number("146", source_types=["civil_law"])
+    assert found, "article 146 must exist in the civil corpus"
+    assert all(a.article_number == "146" for a in found)
+    assert all(a.source_type.value == "civil_law" for a in found)
+
+
+async def test_cited_article_pinning_survives_duplicate_numbers(seeded_store):
+    """The same number exists in several codes and each must be retrievable.
+
+    Article 1 opens nearly every Yemeni code, so keying a lookup on the number
+    alone would drop a statute.
+    """
+    store = seeded_store.store
+    found = await store.find_by_article_number("1", source_types=None, limit=20)
+    documents = {a.document_id for a in found}
+    assert len(documents) >= 2, "article 1 exists in more than one Yemeni code"
+
+
+async def test_find_by_article_number_normalises_arabic_digits(seeded_store):
+    """Sources print numbers in Arabic-Indic digits; citations use Western."""
+    store = seeded_store.store
+    assert await store.find_by_article_number("١٤٦", source_types=["civil_law"])
+    assert await store.find_by_article_number("146", source_types=["civil_law"])

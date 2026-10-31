@@ -100,10 +100,21 @@ class JudgmentService:
             ("subject_matter", case.get("subject_matter")),
         ):
             preamble[key] = value
-        if not isinstance(preamble.get("plaintiff"), dict) or not preamble["plaintiff"].get("name"):
-            preamble["plaintiff"] = {"name": case.get("plaintiff_name")}
-        if not isinstance(preamble.get("defendant"), dict) or not preamble["defendant"].get("name"):
-            preamble["defendant"] = {"name": case.get("defendant_name")}
+        # Party names are authoritative facts from the case file, exactly like
+        # the court and the case number. A model that "recalls" a name - or
+        # derives one from the subject matter - must never override the record.
+        for role, name_key, details_key in (
+            ("plaintiff", "plaintiff_name", "plaintiff_details"),
+            ("defendant", "defendant_name", "defendant_details"),
+        ):
+            party = preamble.get(role)
+            party = dict(party) if isinstance(party, dict) else {}
+            details = case.get(details_key) or {}
+            party["name"] = case.get(name_key) or details.get("name")
+            for extra in ("address", "representative", "role"):
+                if not party.get(extra) and details.get(extra):
+                    party[extra] = details[extra]
+            preamble[role] = party
         payload["preamble"] = preamble
 
         facts = payload.get("facts") if isinstance(payload.get("facts"), dict) else {}

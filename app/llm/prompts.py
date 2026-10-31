@@ -31,6 +31,11 @@ GROUNDING_CONTRACT = """
 6. الحياد: لا تنحز لطرف على الآخر؛ قيّم أدلة الطرفين بالمعيار القانوني ذاته.
 7. الإفصاح عن القصور: إذا كانت الأدلة المقدمة غير كافية للإثبات وفق القانون، فصرّح بذلك
    ولا تُكمل النقص بالتخمين.
+8. جودة النص المصدر: كل نص مسترجع يحمل حقل «جودة النص» (high أو medium أو low). إذا كانت
+   الجودة medium أو low فالنص مستخرج آلياً من نسخة ممسوحة ضوئياً وقد يحتمل خطأً في النقل،
+   فعندها: (أ) استند إلى النص كما ورد، (ب) نبّه صريحاً في الحيثيات إلى ضرورة مطابقة النص
+   مع النسخة الرسمية الورقية قبل الاعتماد النهائي، (ج) لا تُصلح أنت أي كلمة أو رقم تراه
+   مشوّهاً، بل أشر إلى موضع الشك فقط.
 """.strip()
 
 EVIDENCE_SYSTEM_PROMPT = f"""
@@ -122,6 +127,10 @@ def build_retrieved_statutes_block(articles: list[dict]) -> str:
         if article.get("heading"):
             lines.append(f"    العنوان: {article['heading']}")
         lines.append(f"    النص: {str(article.get('content', '')).strip()}")
+        if article.get("text_quality"):
+            lines.append(f"    جودة النص: {article['text_quality']}")
+        if article.get("source_url"):
+            lines.append(f"    المصدر: {article['source_url']}")
         if article.get("similarity") is not None:
             lines.append(f"    درجة الملاءمة: {float(article['similarity']):.3f}")
         lines.append("")

@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>منصة الذكاء الاصطناعي القانوني — الجمهورية اليمنية</title>
+<style>
+  :root{
+    --bg:#0f1720; --panel:#17212b; --panel2:#1e2a36; --line:#2c3a49;
+    --ink:#e8eef5; --muted:#93a4b6; --gold:#c8a24a; --gold2:#e0be6a;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:"Segoe UI","Noto Naskh Arabic",Tahoma,sans-serif;line-height:1.75}
+  header{background:linear-gradient(135deg,#132030,#1b2b3c);
+    border-bottom:2px solid var(--gold);padding:22px 28px}
+  header h1{margin:0;font-size:23px;color:var(--gold2)}
+  header p{margin:6px 0 0;color:var(--muted);font-size:14px}
+  .badge{display:inline-block;background:#243546;border:1px solid var(--line);
+    color:var(--muted);border-radius:20px;padding:2px 12px;font-size:12px;margin-inline-start:8px}
+  .wrap{max-width:1180px;margin:0 auto;padding:22px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  @media(max-width:900px){.grid{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px;margin-bottom:18px}
+  .card h2{margin:0 0 14px;font-size:17px;color:var(--gold2);
+    border-bottom:1px solid var(--line);padding-bottom:9px}
+  label{display:block;font-size:13px;color:var(--muted);margin:10px 0 4px}
+  input,textarea,select{width:100%;background:var(--panel2);border:1px solid var(--line);
+    color:var(--ink);border-radius:8px;padding:9px 11px;font-family:inherit;font-size:14px}
+  input:focus,textarea:focus,select:focus{outline:none;border-color:var(--gold)}
+  textarea{min-height:78px;resize:vertical}
+  button{background:linear-gradient(135deg,var(--gold),#a8823a);color:#12181f;border:0;
+    border-radius:9px;padding:12px 26px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit}
+  button:hover{filter:brightness(1.1)}
+  button:disabled{opacity:.55;cursor:wait}
+  button.ghost{background:transparent;border:1px solid var(--line);color:var(--muted);
+    padding:8px 16px;font-size:13px;font-weight:500}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .warn{background:#3a2b16;border:1px solid #6b5326;color:#f0d59a;
+    border-radius:9px;padding:11px 14px;font-size:13px;margin-bottom:16px}
+  .stat{display:inline-block;background:var(--panel2);border:1px solid var(--line);
+    border-radius:9px;padding:9px 15px;margin:4px;font-size:13px}
+  .stat b{color:var(--gold2);font-size:17px}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin-top:8px}
+  th,td{text-align:right;padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--gold2);font-weight:600;background:var(--panel2)}
+  .q{display:inline-block;border-radius:5px;padding:1px 8px;font-size:11px;font-weight:700}
+  .q-high{background:#1c3a28;color:#7fd8a3;border:1px solid #2f6b47}
+  .q-medium{background:#3a3218;color:#e5c877;border:1px solid #6b5a26}
+  .q-low{background:#3a1f1f;color:#e58b8b;border:1px solid #6b2f2f}
+  .q-unknown{background:#26313c;color:var(--muted);border:1px solid var(--line)}
+  .md{background:#111a22;border:1px solid var(--line);border-radius:9px;
+    padding:20px;max-height:560px;overflow:auto;font-size:14.5px}
+  .md h1{font-size:20px;color:var(--gold2);border-bottom:1px solid var(--line);padding-bottom:8px}
+  .md h2{font-size:17px;color:var(--gold2);margin-top:22px}
+  .md h3{font-size:15px;color:var(--gold2)}
+  .md blockquote{background:#2a2010;border-inline-start:3px solid var(--gold);
+    margin:12px 0;padding:10px 14px;border-radius:6px;color:#e8d9ae;font-size:13px}
+  .md hr{border:0;border-top:1px solid var(--line);margin:18px 0}
+  .muted{color:var(--muted);font-size:13px}
+  .spinner{display:none;color:var(--gold2);font-size:14px;margin-top:10px}
+  .spinner.on{display:block}
+  .links a{color:var(--gold2);margin-inline-end:16px;font-size:13px;text-decoration:none}
+  .links a:hover{text-decoration:underline}
+</style>
+</head>
+<body>
+<header>
+  <h1>منصة الذكاء الاصطناعي القانوني <span class="badge">الجمهورية اليمنية</span></h1>
+  <p>محرك القرار والاستدلال القانوني — استرجاع النصوص القانونية (RAG) وتوليد مسودة حكم قضائي مُسنَدة</p>
+  <div class="links" style="margin-top:10px">
+    <a href="/docs" target="_blank">وثائق الـ API</a>
+    <a href="/api/v1/ingestion/stats" target="_blank">إحصاءات المدونة</a>
+    <a href="/api/v1/health/ready" target="_blank">جاهزية النظام</a>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="warn">
+    ⚠️ <b>تنبيه:</b> المخرجات مسودات آلية لا تُعدّ أحكاماً قضائية إلا بعد مراجعتها واعتمادها من القاضي المختص.
+    يُمنع النظام من الاستشهاد بأي نص غير موجود حرفياً في المدونة القانونية، ويُرفض أي اقتباس غير مُتحقق منه.
+  </div>
+
+  <div class="card">
+    <h2>حالة المدونة القانونية</h2>
+    <div id="stats"><span class="muted">جارٍ التحميل…</span></div>
+  </div>
+
+  <form id="caseForm">
+    <div class="card">
+      <h2>بيانات القضية</h2>
+      <div class="row">
+        <div><label>رقم القضية</label><input name="case_number" value="1451/2026" required></div>
+        <div><label>نوع الدعوى</label>
+          <select name="case_type">
+            <option value="مدني">مدني</option>
+            <option value="تجاري">تجاري</option>
+            <option value="جنائي">جنائي</option>
+            <option value="أسرة">أسرة</option>
+            <option value="عمالي">عمالي</option>
+          </select>
+        </div>
+      </div>
+      <div class="row">
+        <div><label>المحكمة</label><input name="court_name" value="المحكمة الابتدائية - مأرب" required></div>
+        <div><label>القاضي</label><input name="judge_name" value="القاضي/ عبدالله المأربي"></div>
+      </div>
+      <label>موضوع الدعوى</label>
+      <input name="subject_matter" value="المطالبة بإلزام المدعى عليه بتنفيذ عقد بيع" required>
+      <label>ملخص الوقائع</label>
+      <textarea name="facts_summary">اتفق الطرفان على بيع سيارة بثمن محدد، فسلّم المدعي السيارة وتأخر المدعى عليه عن السداد دون سبب مشروع.</textarea>
+      <div class="row">
+        <div><label>قيمة الدعوى</label><input name="claim_value" type="number" value="3500000"></div>
+        <div><label>العملة</label><input name="currency" value="YER"></div>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <h2>المدعي</h2>
+        <label>الاسم</label><input name="plaintiff_name" value="أحمد عبدالله ناصر" required>
+        <label>العنوان</label><input name="plaintiff_address" value="مأرب">
+        <label>دعوى المدعي (الطلبات)</label>
+        <textarea name="plaintiff_claims">إلزام المدعى عليه بأداء الثمن المتفق عليه</textarea>
+        <label>السند القانوني (مثال: المادة 146)</label>
+        <input name="plaintiff_basis" value="المادة 146">
+      </div>
+      <div class="card">
+        <h2>المدعى عليه</h2>
+        <label>الاسم</label><input name="defendant_name" value="صالح محمد العمري" required>
+        <label>العنوان</label><input name="defendant_address" value="مأرب">
+        <label>ردود المدعى عليه</label>
+        <textarea name="defendant_responses">يتمسك المدعى عليه بأنه سدد جزءاً من الثمن</textarea>
+        <label>السند القانوني</label>
+        <input name="defendant_basis" value="">
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>الأدلة والأسانيد</h2>
+      <label>وصف الدليل</label>
+      <input name="evidence_desc" value="عقد بيع سيارة موقّع من الطرفين">
+      <label>نوع الدليل</label>
+      <select name="evidence_type">
+        <option value="contract">عقد</option>
+        <option value="witness">شهادة شهود</option>
+        <option value="document">مستند رسمي</option>
+        <option value="expert">تقرير خبير</option>
+        <option value="oath">يمين</option>
+        <option value="admission">إقرار</option>
+        <option value="other">أخرى</option>
+      </select>
+      <div style="margin-top:16px">
+        <button type="submit" id="submitBtn">توليد مسودة الحكم القضائي</button>
+        <button type="button" class="ghost" id="clearBtn">مسح النتائج</button>
+      </div>
+      <div class="spinner" id="spinner">⏳ جارٍ تحليل الدعوى، واسترجاع النصوص القانونية، وتوليد المسودة…</div>
+    </div>
+  </form>
+
+  <div id="results" style="display:none">
+    <div class="card">
+      <h2>ملخص النتيجة</h2>
+      <div id="summary"></div>
+    </div>
+    <div class="card">
+      <h2>النصوص القانونية المُسترجَعة (مع المصدر وجودة النص)</h2>
+      <div style="overflow:auto"><table id="articles"></table></div>
+    </div>
+    <div class="card">
+      <h2>مسودة الحكم القضائي</h2>
+      <div class="md" id="markdown"></div>
+      <p class="muted" style="margin-top:12px">يمكن الحصول على المسودة بصيغة JSON من استجابة الـ API مباشرة.</p>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => (s ?? '').toString().replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+async function loadStats(){
+  try{
+    const d = await (await fetch('/api/v1/ingestion/stats')).json();
+    const buckets = d.buckets || d;
+    if(Array.isArray(buckets)){
+      const total = buckets.reduce((n,b) => n + (b.articles||0), 0);
+      $('#stats').innerHTML =
+        `<span class="stat">إجمالي المواد: <b>${total.toLocaleString('ar-EG')}</b></span>` +
+        `<span class="stat">عدد القوانين: <b>${buckets.length}</b></span>` +
+        '<div style="margin-top:10px">' + buckets.map(b =>
+          `<span class="stat">${esc(b.source_type)}: <b>${(b.articles||0).toLocaleString('ar-EG')}</b></span>`
+        ).join('') + '</div>';
+    } else {
+      $('#stats').innerHTML = '<span class="muted">لا توجد بيانات</span>';
+    }
+  }catch(e){ $('#stats').innerHTML = '<span class="muted">تعذّر تحميل الإحصاءات</span>'; }
+}
+
+function renderMarkdown(md){
+  let h = esc(md);
+  h = h.replace(/^### (.*)$/gm,'<h3>$1</h3>')
+       .replace(/^## (.*)$/gm,'<h2>$1</h2>')
+       .replace(/^# (.*)$/gm,'<h1>$1</h1>')
+       .replace(/^&gt; (.*)$/gm,'<blockquote>$1</blockquote>')
+       .replace(/^---$/gm,'<hr>')
+       .replace(/\*\*(.+?)\*\*/g,'<b>$1</b>')
+       .replace(/\*(.+?)\*/g,'<i>$1</i>');
+  return h.split('\n').map(l => l.trim() === '' ? '' : (l.startsWith('<') ? l : `<p>${l}</p>`)).join('\n');
+}
+
+$('#caseForm').addEventListener('submit', async ev => {
+  ev.preventDefault();
+  const f = new FormData(ev.target);
+  const g = k => (f.get(k) || '').toString().trim();
+  const basis = b => b ? [b] : [];
+
+  const payload = {
+    case_number: g('case_number'),
+    case_type: g('case_type'),
+    court_name: g('court_name'),
+    judge_name: g('judge_name') || null,
+    subject_matter: g('subject_matter'),
+    facts_summary: g('facts_summary') || null,
+    claim_value: g('claim_value') ? Number(g('claim_value')) : null,
+    currency: g('currency') || 'YER',
+    plaintiff: { name: g('plaintiff_name'), role: 'plaintiff', address: g('plaintiff_address') || null },
+    defendant: { name: g('defendant_name'), role: 'defendant', address: g('defendant_address') || null },
+    plaintiff_claims: [{ title: 'طلب المدعي', description: g('plaintiff_claims') || '—', legal_basis: basis(g('plaintiff_basis')) }],
+    defendant_responses: [{ title: 'رد المدعى عليه', description: g('defendant_responses') || '—', legal_basis: basis(g('defendant_basis')) }],
+    evidence: [{ title: g('evidence_desc') || 'دليل', evidence_type: g('evidence_type'), description: g('evidence_desc') || null }]
+  };
+
+  $('#submitBtn').disabled = true;
+  $('#spinner').classList.add('on');
+  $('#results').style.display = 'none';
+
+  try{
+    const r = await fetch('/api/v1/cases/submit', {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)
+    });
+    if(!r.ok) throw new Error('HTTP ' + r.status + ': ' + (await r.text()).slice(0, 300));
+    show(await r.json());
+  }catch(e){
+    alert('تعذّر توليد المسودة:\n' + e.message);
+  }finally{
+    $('#submitBtn').disabled = false;
+    $('#spinner').classList.remove('on');
+  }
+});
+
+function show(d){
+  const arts = d.retrieved_articles || [];
+  const pre = (d.judgment || {}).preamble || {};
+  $('#summary').innerHTML =
+    `<span class="stat">رقم القضية: <b>${esc(d.case && d.case.case_number)}</b></span>` +
+    `<span class="stat">المدعي: <b>${esc(pre.plaintiff && pre.plaintiff.name)}</b></span>` +
+    `<span class="stat">المدعى عليه: <b>${esc(pre.defendant && pre.defendant.name)}</b></span>` +
+    `<span class="stat">درجة الإسناد: <b>${(d.grounding_score ?? 0).toFixed(2)}</b></span>` +
+    `<span class="stat">المواد المسترجعة: <b>${arts.length}</b></span>` +
+    (d.warnings || []).map(w => `<div class="warn" style="margin-top:12px">${esc(w)}</div>`).join('');
+
+  $('#articles').innerHTML =
+    '<tr><th>المادة</th><th>القانون</th><th>جودة النص</th><th>حرفي</th><th>النص</th><th>المصدر</th></tr>' +
+    arts.map(a => {
+      const q = a.text_quality || 'unknown';
+      const c = a.content || '';
+      return `<tr>
+        <td><b>${esc(a.article_label)}</b></td>
+        <td>${esc((a.law_title || '').slice(0, 42))}</td>
+        <td><span class="q q-${esc(q)}">${esc(q)}</span></td>
+        <td>${a.verbatim ? '✔' : '✖'}</td>
+        <td>${esc(c.slice(0, 190))}${c.length > 190 ? '…' : ''}</td>
+        <td>${a.source_url ? `<a href="${esc(a.source_url)}" target="_blank" style="color:var(--gold2)">رابط</a>` : '—'}</td>
+      </tr>`;
+    }).join('');
+
+  $('#markdown').innerHTML = renderMarkdown(d.judgment_markdown || 'لا توجد مسودة.');
+  $('#results').style.display = 'block';
+  $('#results').scrollIntoView({behavior: 'smooth'});
+}
+
+$('#clearBtn').onclick = () => { $('#results').style.display = 'none'; };
+loadStats();
+</script>
+</body>
+</html>

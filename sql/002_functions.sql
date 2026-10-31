@@ -75,7 +75,10 @@ returns table (
     similarity     float,     -- cosine similarity (0..1)
     keyword_rank   int,
     vector_rank    int,
-    fused_score    float
+    fused_score    float,
+    source_url     text,
+    text_quality   text,
+    verbatim       boolean
 )
 language sql stable as $$
 with q as (
@@ -86,7 +89,10 @@ with q as (
 base as (
     select a.id, a.document_id, a.source_type, d.title_ar, d.law_number,
            a.article_number, a.article_label, a.chapter, a.heading_ar, a.content_ar,
-           a.embedding, a.content_norm
+           a.embedding, a.content_norm,
+           d.source_url,
+           d.metadata -> 'provenance' ->> 'quality'  as text_quality,
+           (d.metadata -> 'provenance' ->> 'verbatim')::boolean as verbatim
     from legal_articles a
     join legal_documents d on d.id = a.document_id
     where (filter_sources  is null or a.source_type::text = any(filter_sources))
@@ -130,7 +136,10 @@ select s.id, s.document_id, s.source_type, s.title_ar, s.law_number,
        s.similarity::float,
        nullif(f.krank, 100000)::int,
        nullif(f.vrank, 100000)::int,
-       f.fused::float
+       f.fused::float,
+       s.source_url,
+       s.text_quality,
+       s.verbatim
 from fused f
 join scored s on s.id = f.id
 where s.similarity >= min_similarity

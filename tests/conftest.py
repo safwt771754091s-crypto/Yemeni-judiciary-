@@ -31,7 +31,7 @@ from app.db.vector_store import reset_vector_store
 from app.schemas.legal import IngestTextRequest, LegalDocumentCreate
 from app.services.ingestion import ingestion_service
 
-SAMPLE = ROOT / "app/data/samples/yemeni_laws_seed.json"
+SAMPLE = ROOT / "app/data/samples/yemeni_laws_excerpt.json"
 
 
 @pytest.fixture(scope="session")

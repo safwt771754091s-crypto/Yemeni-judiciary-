@@ -81,7 +81,9 @@ def split_into_articles(text: str) -> list[tuple[str | None, str]]:
         end = matches[index + 1].start() if index + 1 < len(matches) else len(normalised)
         body = normalised[start:end].strip()
         if body:
-            articles.append((match.group(1).strip(), body))
+            # Numbers are stored in Western digits so that a citation typed as
+            # "المادة 146" matches a statute whose source prints "١٤٦".
+            articles.append((to_western_digits(match.group(1).strip()), body))
     return articles
 
 

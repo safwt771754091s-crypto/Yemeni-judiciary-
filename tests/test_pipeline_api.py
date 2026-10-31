@@ -180,3 +180,36 @@ def test_render_markdown_is_pure(seeded_store=None):
     markdown = render_markdown(envelope)
     assert "الديباجة" in markdown and "المنطوق" in markdown
     assert "أ" in markdown and "ب" in markdown
+
+
+async def test_party_names_come_from_the_case_file_not_the_model(seeded_store, sample_case_payload):
+    """Regression: the model once returned the subject matter as the defendant.
+
+    Party identity is a fact of record. It must be copied from the case file,
+    never generated, exactly like the court name and the case number.
+    """
+    request = CaseSubmissionRequest.model_validate(sample_case_payload)
+    response = await case_pipeline.submit(request)
+
+    preamble = response.judgment.preamble
+    assert preamble.plaintiff["name"] == sample_case_payload["plaintiff"]["name"]
+    assert preamble.defendant["name"] == sample_case_payload["defendant"]["name"]
+    assert preamble.defendant["name"] != sample_case_payload["subject_matter"]
+
+
+async def test_api_response_exposes_citation_provenance(seeded_store, sample_case_payload):
+    """Every retrieved article must carry its source and text quality.
+
+    Regression: the response builder hand-picked fields and silently dropped
+    source_url, text_quality and verbatim, hiding the provenance the whole
+    anti-fabrication design depends on.
+    """
+    request = CaseSubmissionRequest.model_validate(sample_case_payload)
+    response = await case_pipeline.submit(request)
+
+    assert response.retrieved_articles
+    for article in response.retrieved_articles:
+        assert "text_quality" in article
+        assert "source_url" in article
+        assert "verbatim" in article
+        assert article["content"], "the cited text itself must be returned"

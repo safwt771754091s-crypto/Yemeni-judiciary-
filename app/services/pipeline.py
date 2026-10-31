@@ -189,6 +189,11 @@ class CasePipeline:
                     "law_title": a.law_title,
                     "law_number": a.law_number,
                     "source_type": a.source_type.value,
+                    "article_number": a.article_number,
+                    "content": a.content,
+                    "text_quality": a.text_quality,
+                    "source_url": a.source_url,
+                    "verbatim": a.verbatim,
                     "similarity": round(a.similarity, 4),
                     "fused_score": round(a.fused_score, 6),
                 }

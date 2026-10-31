@@ -31,7 +31,7 @@ from app.schemas.legal import IngestTextRequest, LegalDocumentCreate
 from app.services.ingestion import ingestion_service
 
 logger = get_logger("seed_corpus")
-DEFAULT_CORPUS = Path(__file__).resolve().parents[1] / "app/data/samples/yemeni_laws_seed.json"
+DEFAULT_CORPUS = Path(__file__).resolve().parents[1] / "app/data/corpus/yemeni_laws.json"
 
 
 async def seed(path: Path, dry_run: bool) -> int:

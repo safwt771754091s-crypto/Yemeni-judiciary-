@@ -106,7 +106,11 @@ class RetrievalService:
         # provisions the parties actually relied on.
         explicit = self._explicit_article_numbers(case)
         pinned = await self._pin_articles(explicit, source_types)
-        pinned_ids = {a.article_id for a in pinned}
+        # Key on (document, article) rather than chunk id: dedup keeps one chunk
+        # per article, and that survivor is what must rank first.
+        pinned_keys = {
+            (a.document_id, a.article_number or a.article_id) for a in pinned
+        }
         for article in pinned:
             merged.setdefault(article.article_id, article)
 
@@ -114,7 +118,11 @@ class RetrievalService:
         deduped = self._deduplicate(ranked)
         results = sorted(
             deduped,
-            key=lambda a: (a.article_id in pinned_ids, a.fused_score, a.similarity),
+            key=lambda a: (
+                (a.document_id, a.article_number or a.article_id) in pinned_keys,
+                a.fused_score,
+                a.similarity,
+            ),
             reverse=True,
         )[: max(top_k, len(pinned))]
         duration_ms = (time.perf_counter() - started) * 1000
@@ -195,22 +203,25 @@ class RetrievalService:
     async def _pin_articles(
         self, article_numbers: list[str], source_types: list[str] | None
     ) -> list[RetrievedArticle]:
+        """Fetch cited articles by exact number.
+
+        A semantic search for the string "المادة 146" is not reliable across a
+        corpus this size, so cited articles are looked up by number.
+        """
         pinned: list[RetrievedArticle] = []
+        seen: set[str] = set()
         for number in article_numbers:
             try:
-                found = await self.store.search(
-                    query=f"المادة {number}",
-                    query_embedding=await self.embedder.embed_query(f"المادة {number}"),
-                    top_k=2,
-                    source_types=source_types,
-                    min_similarity=0.0,
+                found = await self.store.find_by_article_number(
+                    number, source_types=source_types, limit=3
                 )
             except Exception:
                 continue
             for article in found:
-                if article.article_number and article.article_number.strip() == number:
-                    pinned.append(article)
-                    break
+                if article.article_id in seen:
+                    continue
+                seen.add(article.article_id)
+                pinned.append(article)
         return pinned
 
     @staticmethod
