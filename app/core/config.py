@@ -42,6 +42,11 @@ class Settings(BaseSettings):
     llm_temperature: float = 0.0
     llm_max_tokens: int = 4096
     llm_timeout_seconds: float = 120.0
+    #: Retries for transient provider failures (429/5xx/timeout). A rate-limited
+    #: provider must not discard a drafted judgment mid-pipeline.
+    llm_max_retries: int = 3
+    llm_retry_base_delay_seconds: float = 2.0
+    llm_retry_max_delay_seconds: float = 60.0
 
     # --- retrieval ---
     retrieval_top_k: int = 8

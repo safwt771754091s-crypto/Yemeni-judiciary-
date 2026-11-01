@@ -11,12 +11,16 @@ paths produce identical message content.
 """
 from __future__ import annotations
 
+import asyncio
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
 from pydantic import BaseModel, ValidationError
 
+from app.core.config import settings
+from app.core.errors import LLMError
 from app.core.logging import get_logger
 from app.llm.prompts import (
     CLASSIFICATION_PROMPT,
@@ -28,13 +32,65 @@ from app.llm.prompts import (
     build_evidence_block,
     build_retrieved_statutes_block,
 )
-from app.llm.provider import ChatMessage, LLMProvider, llm_provider
+from app.llm.provider import ChatMessage, Completion, LLMProvider, llm_provider
 
 logger = get_logger(__name__)
 
 
 class _ChainOutput(BaseModel):
     """Marker base class for chain outputs."""
+
+
+#: Provider errors that a retry can plausibly fix (rate limits, timeouts, 5xx).
+_RETRYABLE_RE = re.compile(
+    r"\b(timeout|timed out|temporarily|overloaded|unavailable|too many requests|"
+    r"rate.?limit|free.?limit|connection reset|retry)\b",
+    re.IGNORECASE,
+)
+_STATUS_RE = re.compile(
+    r"(?:error\s+code|status(?:\s+code)?|http)[:\s]*(\d{3})", re.IGNORECASE
+)
+#: HTTP statuses worth retrying: rate limits, request timeout, and any 5xx.
+#: 402 is included because free-tier providers report a resetting quota as
+#: "Payment Required" (e.g. "free limit reached, retry after 45s").
+_RETRYABLE_STATUSES = frozenset({402, 408, 409, 425, 429})
+#: "Retry after 26s" / "retry_after: 26" - honour the provider's own delay.
+_RETRY_AFTER_RE = re.compile(r"retry[_ ]after[\"':\s]+(\d+(?:\.\d+)?)", re.IGNORECASE)
+
+
+def _error_text(exc: Exception) -> str:
+    """Message plus details: the status code and "retry after" hint live in details."""
+    details = getattr(exc, "details", None)
+    return f"{exc} {details}" if details else str(exc)
+
+
+def _is_retryable(exc: Exception) -> bool:
+    """True for a transient failure.
+
+    An explicit HTTP status decides it when present, so a client error (400)
+    that happens to mention "rate limit" in its body is not retried. Only when
+    no status is available do the keyword heuristics apply.
+    """
+    text = _error_text(exc)
+    match = _STATUS_RE.search(text)
+    if match:
+        code = int(match.group(1))
+        if 400 <= code < 500:
+            return code in _RETRYABLE_STATUSES
+        if code >= 500:
+            return True
+    return bool(_RETRYABLE_RE.search(text))
+
+
+def _retry_delay(exc: Exception, attempt: int) -> float:
+    """Backoff for a transient failure, respecting a provider "retry after" hint."""
+    match = _RETRY_AFTER_RE.search(_error_text(exc))
+    if match:
+        return min(float(match.group(1)) + 1.0, settings.llm_retry_max_delay_seconds)
+    return min(
+        settings.llm_retry_base_delay_seconds * (2**attempt),
+        settings.llm_retry_max_delay_seconds,
+    )
 
 
 @dataclass(slots=True)
@@ -82,13 +138,7 @@ class LegalChain:
 
     async def run(self, blocks: Sequence[str], *, context: dict[str, Any] | None = None) -> ChainResult:
         body = self._render(blocks)
-        completion = await self.provider.complete(
-            system=self.system_prompt,
-            messages=[ChatMessage(role="user", content=body)],
-            json_mode=True,
-            max_tokens=self.max_tokens,
-            temperature=self.temperature,
-        )
+        completion = await self._complete_with_retry(body)
         data = completion.data or {}
         schema_error = None
         if self.output_model is not None and data:
@@ -109,6 +159,35 @@ class LegalChain:
             raw_text=completion.text,
             schema_error=schema_error,
         )
+
+    async def _complete_with_retry(self, body: str) -> Completion:
+        """Call the provider, retrying transient failures with exponential backoff.
+
+        A rate-limited or briefly unavailable provider must not lose a drafted
+        judgment: the pipeline runs four sequential calls per case, so one 429
+        would otherwise discard the whole run.
+        """
+        last: Exception | None = None
+        for attempt in range(settings.llm_max_retries + 1):
+            try:
+                return await self.provider.complete(
+                    system=self.system_prompt,
+                    messages=[ChatMessage(role="user", content=body)],
+                    json_mode=True,
+                    max_tokens=self.max_tokens,
+                    temperature=self.temperature,
+                )
+            except LLMError as exc:
+                last = exc
+                if attempt >= settings.llm_max_retries or not _is_retryable(exc):
+                    raise
+                delay = _retry_delay(exc, attempt)
+                logger.warning(
+                    "transient LLM failure, retrying",
+                    extra={"chain": self.name, "attempt": attempt + 1, "delay_s": delay},
+                )
+                await asyncio.sleep(delay)
+        raise last if last else LLMError("فشل استدعاء النموذج دون تفاصيل")
 
 
 def build_query_expansion_chain(provider: LLMProvider | None = None) -> LegalChain:
