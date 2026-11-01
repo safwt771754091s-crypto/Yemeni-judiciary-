@@ -1,11 +1,20 @@
 """FastAPI dependency wiring."""
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Any
 
-from fastapi import Depends
+from fastapi import Depends, Header
 
+from app.core.errors import ForbiddenError, UnauthorizedError
 from app.db.repositories import CaseRepository, case_repository
+from app.db.user_repository import (
+    SectionRepository,
+    UserRepository,
+    section_repository,
+    user_repository,
+)
+from app.services.admin import AdminService, admin_service
+from app.services.auth import AuthService, auth_service
 from app.services.evidence import EvidenceService, evidence_service
 from app.services.ingestion import IngestionService, ingestion_service
 from app.services.judgment import JudgmentService, judgment_service
@@ -42,6 +51,57 @@ def get_n8n_client() -> N8NClient:
     return n8n_client
 
 
+def get_auth_service() -> AuthService:
+    return auth_service
+
+
+def get_admin_service() -> AdminService:
+    return admin_service
+
+
+def get_user_repository() -> UserRepository:
+    return user_repository
+
+
+def get_section_repository() -> SectionRepository:
+    return section_repository
+
+
+async def get_current_user(
+    auth: Annotated[AuthService, Depends(get_auth_service)],
+    authorization: Annotated[str | None, Header()] = None,
+) -> dict[str, Any]:
+    """Resolve the caller from the ``Authorization: Bearer <token>`` header."""
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise UnauthorizedError("يتطلب هذا الإجراء تسجيل الدخول")
+    token = authorization.split(" ", 1)[1].strip()
+    if not token:
+        raise UnauthorizedError("يتطلب هذا الإجراء تسجيل الدخول")
+    return await auth.user_from_token(token)
+
+
+CurrentUserDep = Annotated[dict[str, Any], Depends(get_current_user)]
+
+
+def require_permission(permission: str):
+    """Build a dependency that enforces a single permission."""
+
+    async def _guard(user: CurrentUserDep) -> dict[str, Any]:
+        auth_service.require_permission(user, permission)
+        return user
+
+    return _guard
+
+
+def require_owner(user: CurrentUserDep) -> dict[str, Any]:
+    """Only the platform owner may proceed."""
+    from app.core.permissions import Role
+
+    if Role(user["role"]) is not Role.OWNER:
+        raise ForbiddenError("هذه العملية مقصورة على مالك المنصة")
+    return user
+
+
 IngestionDep = Annotated[IngestionService, Depends(get_ingestion_service)]
 RetrievalDep = Annotated[RetrievalService, Depends(get_retrieval_service)]
 EvidenceDep = Annotated[EvidenceService, Depends(get_evidence_service)]
@@ -49,3 +109,8 @@ JudgmentDep = Annotated[JudgmentService, Depends(get_judgment_service)]
 CaseRepoDep = Annotated[CaseRepository, Depends(get_case_repository)]
 PipelineDep = Annotated[CasePipeline, Depends(get_pipeline)]
 N8NDep = Annotated[N8NClient, Depends(get_n8n_client)]
+AuthDep = Annotated[AuthService, Depends(get_auth_service)]
+AdminDep = Annotated[AdminService, Depends(get_admin_service)]
+UserRepoDep = Annotated[UserRepository, Depends(get_user_repository)]
+SectionRepoDep = Annotated[SectionRepository, Depends(get_section_repository)]
+OwnerDep = Annotated[dict[str, Any], Depends(require_owner)]

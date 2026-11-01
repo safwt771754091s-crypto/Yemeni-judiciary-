@@ -65,7 +65,19 @@ class Settings(BaseSettings):
     max_upload_mb: int = 25
     upload_dir: str = "./var/uploads"
 
-    @field_validator("llm_api_key", "n8n_hmac_secret", mode="before")
+    # --- auth / RBAC ---
+    # Signing key for access tokens. MUST be set in production; the default is
+    # only usable for local development.
+    jwt_secret: str = "dev-insecure-change-me-in-production"
+    jwt_algorithm: str = "HS256"
+    access_token_expire_minutes: int = 720
+    # The platform owner, seeded on startup if the users table is empty.
+    owner_username: str = "owner"
+    owner_password: str = "Owner@Yemen2026"
+    owner_email: str | None = None
+    owner_full_name: str = "مالك المنصة"
+
+    @field_validator("llm_api_key", "n8n_hmac_secret", "owner_email", mode="before")
     @classmethod
     def _blank_to_none(cls, v: object) -> object:
         return None if isinstance(v, str) and not v.strip() else v
@@ -77,6 +89,15 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.app_env == "production"
+
+    @property
+    def auth_secret(self) -> str:
+        """Signing key, warning loudly when the insecure default is in use."""
+        if self.jwt_secret == "dev-insecure-change-me-in-production" and self.is_production:
+            raise RuntimeError(
+                "JWT_SECRET must be set to a strong random value in production"
+            )
+        return self.jwt_secret
 
 
 @lru_cache

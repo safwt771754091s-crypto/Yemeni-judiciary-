@@ -33,6 +33,18 @@ class LegalDocumentOut(ORMModel):
     source_url: str | None = None
 
 
+class LegalDocumentUpdate(BaseModel):
+    """Editable metadata of a legal document (law)."""
+
+    title_ar: str | None = Field(default=None, min_length=2, max_length=500)
+    title_en: str | None = Field(default=None, max_length=500)
+    law_number: str | None = Field(default=None, max_length=64)
+    promulgation_year: int | None = Field(default=None, ge=1900, le=2100)
+    issuing_authority: str | None = Field(default=None, max_length=200)
+    source_url: str | None = Field(default=None, max_length=1000)
+    section_id: uuid.UUID | None = None
+
+
 class LegalArticleOut(ORMModel):
     id: uuid.UUID
     document_id: uuid.UUID

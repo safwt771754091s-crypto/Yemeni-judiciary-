@@ -105,6 +105,11 @@ EMBEDDING_DIM=1536
 LLM_PROVIDER=openai
 LLM_MODEL=gpt-4o
 LLM_API_KEY=sk-...
+
+# المصادقة — إلزامي في الإنتاج
+JWT_SECRET=<قيمة عشوائية قوية: python -c "import secrets;print(secrets.token_urlsafe(48))">
+OWNER_USERNAME=owner
+OWNER_PASSWORD=<كلمة مرور قوية، غيّرها بعد أول دخول>
 ```
 
 > `EMBEDDING_PROVIDER=hash` و `LLM_PROVIDER=mock` يعملان بلا أي شبكة أو مفاتيح —
@@ -164,8 +169,38 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 - التوثيق التفاعلي: http://localhost:8000/docs
 - ReDoc: http://localhost:8000/redoc
 - الفحص: http://localhost:8000/api/v1/health/ready
+- واجهة المنصة: http://localhost:8000/
+- **لوحة التحكم**: http://localhost:8000/ui/admin.html
 
-### 3.6 Docker (اختياري)
+### 3.6 حساب المالك وأول دخول
+
+عند أول تشغيل يُنشئ النظام تلقائياً حساب مالك المنصة (كل الصلاحيات) اعتماداً على
+`OWNER_USERNAME` و`OWNER_PASSWORD` في `.env`، كما يُنشئ الأقسام القانونية الافتراضية.
+
+```bash
+curl -s -X POST http://localhost:8000/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"owner","password":"Owner@Yemen2026"}'
+```
+
+انسخ قيمة `access_token` واستخدمها في ترويسة `Authorization: Bearer <token>`.
+ثم افتح **`/ui/admin.html`** لإدارة الأقسام والقوانين والمواد والمستخدمين.
+
+> ⚠️ **إلزامي في الإنتاج:** اضبط `JWT_SECRET` بقيمة عشوائية قوية، وغيّر كلمة مرور
+> المالك فور أول دخول، ولا تُبقِ القيم الافتراضية. عند غياب `JWT_SECRET` يستعمل
+> النظام مفتاحاً افتراضياً غير آمن ويُصدر تحذيراً في السجل.
+
+الأدوار المدمجة:
+
+| الدور | الوصف | أمثلة الصلاحيات |
+|---|---|---|
+| `owner` | مالك المنصة | كل الصلاحيات دائماً، لا يُقيَّد ولا يُحذف |
+| `admin` | مدير | إدارة المستخدمين والقوانين والمواد والأقسام |
+| `editor` | محرر | إدخال وتعديل المواد والقوانين |
+| `reviewer` | مراجع | مراجعة المسودات واعتمادها |
+| `viewer` | مطّلع | قراءة فقط |
+
+### 3.7 Docker (اختياري)
 
 ```bash
 docker compose up -d --build       # API + Postgres/pgvector محلي
@@ -302,6 +337,38 @@ curl http://localhost:8000/api/v1/ingestion/stats | python -m json.tool
 | GET | `/api/v1/cases/{id}/judgments/{jid}` | مسودة كاملة |
 | POST | `/api/v1/cases/{id}/judgments/{jid}/approve` | اعتماد/رفض (مراجعة بشرية) |
 
+### نقاط نهاية المصادقة والصلاحيات (Auth / RBAC)
+
+| الطريقة | المسار | الصلاحية | الوصف |
+|---|---|---|---|
+| POST | `/api/v1/auth/login` | عام | تسجيل الدخول واستلام رمز الوصول |
+| GET | `/api/v1/auth/me` | مصادق | بيانات المستخدم وصلاحياته الفعّالة |
+| GET | `/api/v1/auth/permissions` | عام | كتالوج الصلاحيات وأدوار النظام |
+| GET | `/api/v1/auth/roles` | عام | الأدوار وتسمياتها العربية |
+| GET | `/api/v1/auth/users` | `users.read` | قائمة المستخدمين |
+| POST | `/api/v1/auth/users` | `users.write` | إنشاء مستخدم |
+| PATCH | `/api/v1/auth/users/{id}` | `users.write` | تعديل الدور/الحالة/الصلاحيات |
+| DELETE | `/api/v1/auth/users/{id}` | `users.delete` | حذف مستخدم (المالك فقط) |
+
+### نقاط نهاية إدارة المنصة (Admin)
+
+| الطريقة | المسار | الصلاحية | الوصف |
+|---|---|---|---|
+| GET | `/api/v1/admin/sections` | `sections.read` | أقسام المنصة |
+| POST | `/api/v1/admin/sections` | `sections.write` | إضافة قسم جديد |
+| PATCH | `/api/v1/admin/sections/{id}` | `sections.write` | تعديل قسم |
+| DELETE | `/api/v1/admin/sections/{id}` | `sections.delete` | حذف قسم |
+| GET | `/api/v1/admin/laws` | `laws.read` | القوانين المخزّنة |
+| POST | `/api/v1/admin/laws/ingest` | `corpus.ingest` | إدخال نص قانون كامل |
+| PATCH | `/api/v1/admin/laws/{id}` | `laws.write` | تعديل بيانات قانون |
+| DELETE | `/api/v1/admin/laws/{id}` | `laws.delete` | حذف قانون وكل مواده |
+| GET | `/api/v1/admin/laws/{id}/articles` | `articles.read` | مواد قانون |
+| PATCH | `/api/v1/admin/articles/{id}` | `articles.write` | تعديل مادة وإعادة تضمينها |
+| DELETE | `/api/v1/admin/articles/{id}` | `articles.delete` | حذف مادة |
+
+> جميع المسارات المحمية تتطلب ترويسة `Authorization: Bearer <token>`.
+> لوحة التحكم التفاعلية متاحة على **`/ui/admin.html`**.
+
 ---
 
 ## 6. مكافحة الهلوسة (Anti-Hallucination)
@@ -347,13 +414,16 @@ LEGAL_AI_N8N_SECRET=<نفس N8N_HMAC_SECRET>
 
 ```bash
 pip install -r requirements-dev.txt
-pytest -q            # 26 اختباراً، بلا شبكة وبلا قاعدة بيانات
+pytest -q            # 58 اختباراً، بلا شبكة وبلا قاعدة بيانات
 ruff check app scripts tests
 ```
 
 تغطي الاختبارات: تطبيع النص العربي، التقطيع واعياً بالمواد، مدقّق الاستشهاد
 (رفض المواد المُختلقة والاقتباسات المفبركة)، الاسترجاع الهجين وتثبيت المواد
 المُستشهد بها، تقييم الأدلة وفق مراتب الإثبات، والمسار الكامل حتى Markdown.
+كما تغطي طبقة المصادقة والصلاحيات: تجزئة كلمات المرور (PBKDF2)، توقيع الرموز
+والتحقق من العبث بها وانتهائها، مصفوفة الأدوار والصلاحيات، إنشاء حساب المالك،
+منع إنشاء مالك ثانٍ أو تعديله أو حذفه، وعزل صلاحيات كل دور على واجهات الإدارة.
 
 ---
 
@@ -367,21 +437,25 @@ ruff check app scripts tests
 │   │   ├── deps.py                 # ربط التبعيات
 │   │   └── v1/
 │   │       ├── router.py
-│   │       └── routes/             # health, ingestion, retrieval, cases
-│   ├── core/                       # config, logging, errors, text_utils, chunking
-│   ├── db/                         # pool, vector_store, repositories
+│   │       └── routes/             # health, ingestion, retrieval, cases, auth, admin
+│   ├── core/                       # config, logging, errors, text_utils, chunking,
+│   │                               #   security (تجزئة/رموز), permissions (RBAC)
+│   ├── db/                         # pool, vector_store, repositories, user_repository
 │   ├── llm/                        # embeddings, provider, prompts, chains, validator
-│   ├── schemas/                    # common, legal, case, judgment
-│   ├── services/                   # ingestion, retrieval, evidence, judgment, pipeline, n8n
+│   ├── schemas/                    # common, legal, case, judgment, auth
+│   ├── services/                   # ingestion, retrieval, evidence, judgment, pipeline,
+│   │                               #   n8n, auth (المالك), admin (إدارة المنصة)
+│   ├── static/                     # index.html (واجهة المنصة), admin.html (لوحة التحكم)
 │   └── data/samples/               # مدونة يمنية تجريبية
 ├── sql/
 │   ├── 001_init_pgvector.sql       # الجداول والفهارس (HNSW, GIN, trigram)
-│   └── 002_functions.sql           # match_legal_articles, normalize_arabic, upsert...
+│   ├── 002_functions.sql           # match_legal_articles, normalize_arabic, upsert...
+│   └── 003_auth_rbac.sql           # platform_users, roles, sections, permissions
 ├── scripts/
 │   ├── seed_corpus.py              # إدخال المدونة القانونية
 │   └── apply_sql.py                # تنفيذ مخطط SQL
 ├── n8n/legal_case_workflow.json    # سير عمل جاهز
-├── tests/                          # 26 اختباراً
+├── tests/                          # 58 اختباراً
 ├── Dockerfile · docker-compose.yml · Makefile · requirements.txt
 └── .env.example
 ```
@@ -432,8 +506,17 @@ python scripts/seed_corpus.py --file my_official_corpus.json
 ## 11. الأمان والتشغيل
 
 - لا تُدرج `.env` في نظام إدارة الإصدارات (مستثنى في `.gitignore`).
-- للإنتاج: قيّد `CORS` (يُضيّق تلقائياً عند `APP_ENV=production`)، ووظّف تخويلاً على
-  المستخدمين، وسجّل كل تقديم قضية في `audit_log`.
+- **المصادقة**: كل مسارات الإدارة محمية بـ JWT موقّع (HMAC-SHA256). كلمات المرور
+  تُخزَّن بتجزئة PBKDF2-SHA256 مع ملح عشوائي لكل مستخدم — لا تُخزَّن أبداً كنص صريح.
+- **JWT_SECRET إلزامي في الإنتاج**: بدونه يستعمل النظام مفتاحاً افتراضياً غير آمن.
+  أنشئ مفتاحاً بـ `python -c "import secrets;print(secrets.token_urlsafe(48))"`.
+- **الصلاحيات الحسّاسة للمالك فقط**: `platform.manage`, `laws.delete`,
+  `articles.delete`, `sections.delete`, `users.delete`. أدوار `admin` و`editor`
+  و`reviewer` و`viewer` لا تملك أي صلاحية حذف أو إدارة مستخدمين.
+- **حماية حساب المالك**: لا يمكن إنشاء مالك ثانٍ، ولا تعديل دور المالك، ولا حذفه،
+  ولا حذف المستخدم لحسابه الخاص.
+- للإنتاج: قيّد `CORS` (يُضيّق تلقائياً عند `APP_ENV=production`)، وسجّل كل تقديم
+  قضية في `audit_log`.
 - الاستشهادات المحذوفة والتحذيرات تُخزَّن مع كل مسودة — للمراجعة والتدقيق.
 
 ---

@@ -15,7 +15,9 @@ from app.core.config import settings
 from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging, get_logger
 from app.db.pool import database
+from app.db.user_repository import section_repository
 from app.db.vector_store import vector_store
+from app.services.auth import DEFAULT_SECTIONS, auth_service
 
 logger = get_logger(__name__)
 
@@ -52,9 +54,28 @@ async def lifespan(app: FastAPI):
             await database.connect()
         except Exception as exc:
             logger.error("database unavailable at startup", extra={"error": str(exc)})
+    await _bootstrap_platform()
     yield
     await database.disconnect()
     logger.info("shutdown complete")
+
+
+async def _bootstrap_platform() -> None:
+    """Seed the owner account and the default sections on first run.
+
+    Failures are logged, never fatal: the API must still start (and the test
+    suite must still run) when no database is configured.
+    """
+    try:
+        created = await auth_service.ensure_owner()
+        if created:
+            logger.info("owner account created", extra={"username": settings.owner_username})
+        if not await section_repository.list_sections():
+            for section in DEFAULT_SECTIONS:
+                await section_repository.create(dict(section))
+            logger.info("default sections created", extra={"count": len(DEFAULT_SECTIONS)})
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.warning("platform bootstrap skipped", extra={"error": str(exc)})
 
 
 def create_app() -> FastAPI:

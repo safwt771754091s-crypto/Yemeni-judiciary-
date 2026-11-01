@@ -27,7 +27,8 @@ os.environ["N8N_ENABLED"] = "false"
 os.environ["APP_ENV"] = "test"
 
 from app.db.repositories import case_repository
-from app.db.vector_store import reset_vector_store
+from app.db.user_repository import section_repository, user_repository
+from app.db.vector_store import legal_document_admin_repository, reset_vector_store
 from app.schemas.legal import IngestTextRequest, LegalDocumentCreate
 from app.services.ingestion import ingestion_service
 
@@ -46,6 +47,9 @@ async def clean_state():
     case_repository._cases.clear()
     case_repository._evidence.clear()
     case_repository._judgments.clear()
+    user_repository.reset()
+    section_repository.reset()
+    legal_document_admin_repository.reset()
     yield
 
 

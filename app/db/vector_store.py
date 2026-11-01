@@ -17,9 +17,11 @@ import math
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from typing import Any, Protocol
 
 from app.core.config import settings
+from app.core.errors import NotFoundError
 from app.core.logging import get_logger
 from app.core.text_utils import normalize_arabic
 from app.db.pool import database
@@ -27,6 +29,10 @@ from app.schemas.common import LegalSourceType
 from app.schemas.legal import RetrievedArticle
 
 logger = get_logger(__name__)
+
+
+def _now() -> datetime:
+    return datetime.now(UTC)
 
 
 @dataclass(slots=True)
@@ -197,6 +203,324 @@ class PgVectorStore:
 
     async def count_articles(self) -> int:
         return int(await database.fetchval("select count(*) from legal_articles") or 0)
+
+
+class LegalDocumentAdminRepository:
+    """Read/update/delete operations on the legal corpus for the admin UI.
+
+    The ingestion path already owns creation (``upsert_legal_document`` +
+    ``upsert_legal_article``); this repository covers browsing, editing metadata
+    and removing documents, in both Postgres and in-memory modes.
+    """
+
+    def __init__(self) -> None:
+        self._documents: dict[str, dict[str, Any]] = {}
+        self._articles: dict[str, list[dict[str, Any]]] = {}
+
+    @property
+    def persistent(self) -> bool:
+        return settings.database_enabled
+
+    def _memory(self) -> InMemoryVectorStore | None:
+        """The active in-memory store, so admin edits are visible to retrieval."""
+        return vector_store if isinstance(vector_store, InMemoryVectorStore) else None
+
+    async def list_documents(
+        self, *, source_type: str | None = None, section_id: str | None = None
+    ) -> list[dict[str, Any]]:
+        if self.persistent:
+            rows = await database.fetch(
+                "select d.id, d.source_type, d.title_ar, d.title_en, d.law_number, "
+                "       d.promulgation_year, d.issuing_authority, d.jurisdiction, "
+                "       d.source_url, d.section_id, d.metadata, d.created_at, d.updated_at, "
+                "       s.title_ar as section_title_ar, "
+                "       (select count(*) from legal_articles a where a.document_id = d.id) "
+                "         as article_count "
+                "from legal_documents d "
+                "left join platform_sections s on s.id = d.section_id "
+                "where ($1::text is null or d.source_type::text = $1) "
+                "  and ($2::uuid is null or d.section_id = $2) "
+                "order by d.source_type::text asc, d.promulgation_year asc nulls last",
+                source_type,
+                uuid.UUID(section_id) if section_id else None,
+            )
+            return [dict(r) for r in rows]
+        rows = []
+        for doc in self._documents.values():
+            if source_type and doc["source_type"] != source_type:
+                continue
+            if section_id and str(doc.get("section_id")) != str(section_id):
+                continue
+            row = dict(doc)
+            row["article_count"] = len(self._articles.get(str(doc["id"]), []))
+            rows.append(row)
+        store = self._memory()
+        if store is not None:
+            for doc_id, doc in store.documents.items():
+                if source_type and doc["source_type"] != source_type:
+                    continue
+                if section_id and str(doc.get("section_id")) != str(section_id):
+                    continue
+                row = dict(doc)
+                row["article_count"] = sum(
+                    1 for c in store.chunks.values() if c["document_id"] == doc_id
+                )
+                rows.append(row)
+        return rows
+
+    async def get_document(self, document_id: str | uuid.UUID) -> dict[str, Any] | None:
+        if self.persistent:
+            row = await database.fetchrow(
+                "select id, source_type, title_ar, title_en, law_number, promulgation_year, "
+                "       issuing_authority, jurisdiction, source_url, section_id, metadata, "
+                "       created_at, updated_at "
+                "from legal_documents where id = $1",
+                uuid.UUID(str(document_id)),
+            )
+            return dict(row) if row else None
+        key = str(document_id)
+        if key in self._documents:
+            return dict(self._documents[key])
+        store = self._memory()
+        if store is not None and key in store.documents:
+            return dict(store.documents[key])
+        return None
+
+    async def update_document(
+        self, document_id: str | uuid.UUID, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        if await self.get_document(document_id) is None:
+            raise NotFoundError("القانون غير موجود")
+        if self.persistent:
+            row = await database.fetchrow(
+                "update legal_documents set "
+                "title_ar = coalesce($2, title_ar), "
+                "title_en = coalesce($3, title_en), "
+                "law_number = coalesce($4, law_number), "
+                "promulgation_year = coalesce($5, promulgation_year), "
+                "issuing_authority = coalesce($6, issuing_authority), "
+                "source_url = coalesce($7, source_url), "
+                "section_id = coalesce($8, section_id) "
+                "where id = $1 "
+                "returning id, source_type, title_ar, title_en, law_number, "
+                "          promulgation_year, issuing_authority, jurisdiction, source_url, "
+                "          section_id, metadata, created_at, updated_at",
+                uuid.UUID(str(document_id)),
+                payload.get("title_ar"),
+                payload.get("title_en"),
+                payload.get("law_number"),
+                payload.get("promulgation_year"),
+                payload.get("issuing_authority"),
+                payload.get("source_url"),
+                uuid.UUID(str(payload["section_id"])) if payload.get("section_id") else None,
+            )
+            return dict(row)
+        stored = self._documents[str(document_id)]
+        for column in (
+            "title_ar",
+            "title_en",
+            "law_number",
+            "promulgation_year",
+            "issuing_authority",
+            "source_url",
+            "section_id",
+        ):
+            if payload.get(column) is not None:
+                stored[column] = payload[column]
+        stored["updated_at"] = _now()
+        store = self._memory()
+        if store is not None and str(document_id) in store.documents:
+            for column in ("title_ar", "title_en", "law_number", "promulgation_year",
+                           "issuing_authority", "source_url", "section_id"):
+                if payload.get(column) is not None:
+                    store.documents[str(document_id)][column] = payload[column]
+        return dict(stored)
+
+    async def delete_document(self, document_id: str | uuid.UUID) -> int:
+        """Delete a law and cascade its articles; returns the article count removed."""
+        if await self.get_document(document_id) is None:
+            raise NotFoundError("القانون غير موجود")
+        if self.persistent:
+            removed = int(
+                await database.fetchval(
+                    "select count(*) from legal_articles where document_id = $1",
+                    uuid.UUID(str(document_id)),
+                )
+                or 0
+            )
+            await database.execute(
+                "delete from legal_documents where id = $1", uuid.UUID(str(document_id))
+            )
+            return removed
+        key = str(document_id)
+        removed = len(self._articles.pop(key, []))
+        self._documents.pop(key, None)
+        store = self._memory()
+        if store is not None and key in store.documents:
+            removed += sum(1 for c in list(store.chunks.values()) if c["document_id"] == key)
+            store.documents.pop(key, None)
+            for chunk_key in [k for k, c in store.chunks.items() if c["document_id"] == key]:
+                store.chunks.pop(chunk_key, None)
+        return removed
+
+    async def list_articles(
+        self,
+        document_id: str | uuid.UUID,
+        *,
+        limit: int = 100,
+        offset: int = 0,
+        search: str | None = None,
+    ) -> list[dict[str, Any]]:
+        if self.persistent:
+            rows = await database.fetch(
+                "select id, document_id, source_type, article_number, article_label, "
+                "       chapter, section, heading_ar, content_ar, chunk_index, token_count, "
+                "       created_at "
+                "from legal_articles where document_id = $1 "
+                "  and ($4::text is null or content_ar ilike '%' || $4 || '%' "
+                "       or article_number = $4) "
+                "order by chunk_index asc limit $2 offset $3",
+                uuid.UUID(str(document_id)),
+                limit,
+                offset,
+                search,
+            )
+            return [dict(r) for r in rows]
+        key = str(document_id)
+        rows = [dict(a) for a in self._articles.get(key, [])]
+        store = self._memory()
+        if store is not None:
+            for chunk in store.chunks.values():
+                if chunk["document_id"] != key:
+                    continue
+                rows.append(
+                    {
+                        "id": chunk["id"],
+                        "document_id": chunk["document_id"],
+                        "source_type": chunk["source_type"],
+                        "article_number": chunk["article_number"],
+                        "article_label": chunk["article_label"],
+                        "chapter": chunk.get("chapter"),
+                        "section": chunk.get("section"),
+                        "heading_ar": chunk.get("heading"),
+                        "content_ar": chunk["content"],
+                        "chunk_index": chunk["chunk_index"],
+                        "token_count": chunk["token_count"],
+                    }
+                )
+        if search:
+            rows = [
+                a
+                for a in rows
+                if search in (a.get("content_ar") or "") or a.get("article_number") == search
+            ]
+        rows.sort(key=lambda a: (a.get("chunk_index") or 0, str(a.get("id"))))
+        return rows[offset : offset + limit]
+
+    async def delete_article(self, article_id: str | uuid.UUID) -> None:
+        if self.persistent:
+            result = await database.execute(
+                "delete from legal_articles where id = $1", uuid.UUID(str(article_id))
+            )
+            if result == "DELETE 0":
+                raise NotFoundError("المادة غير موجودة")
+            return
+        for rows in self._articles.values():
+            for index, row in enumerate(rows):
+                if str(row["id"]) == str(article_id):
+                    rows.pop(index)
+                    return
+        store = self._memory()
+        if store is not None:
+            for key, chunk in list(store.chunks.items()):
+                if str(chunk["id"]) == str(article_id):
+                    store.chunks.pop(key, None)
+                    return
+        raise NotFoundError("المادة غير موجودة")
+
+    async def update_article(
+        self, article_id: str | uuid.UUID, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Edit an article's text. The embedding is recomputed by the caller."""
+        if self.persistent:
+            row = await database.fetchrow(
+                "update legal_articles set "
+                "content_ar = coalesce($2, content_ar), "
+                "content_norm = normalize_arabic(coalesce($2, content_ar)), "
+                "article_number = coalesce($3, article_number), "
+                "article_label = coalesce($4, article_label), "
+                "heading_ar = coalesce($5, heading_ar) "
+                "where id = $1 "
+                "returning id, document_id, source_type, article_number, article_label, "
+                "          chapter, section, heading_ar, content_ar, chunk_index, token_count",
+                uuid.UUID(str(article_id)),
+                payload.get("content_ar"),
+                payload.get("article_number"),
+                payload.get("article_label"),
+                payload.get("heading_ar"),
+            )
+            if row is None:
+                raise NotFoundError("المادة غير موجودة")
+            return dict(row)
+        for rows in self._articles.values():
+            for row in rows:
+                if str(row["id"]) == str(article_id):
+                    for column in ("content_ar", "article_number", "article_label", "heading_ar"):
+                        if payload.get(column) is not None:
+                            row[column] = payload[column]
+                    return dict(row)
+        store = self._memory()
+        chunk = None
+        if store is not None:
+            chunk = next(
+                (c for c in store.chunks.values() if str(c["id"]) == str(article_id)), None
+            )
+        if chunk is not None:
+            if payload.get("content_ar") is not None:
+                chunk["content"] = payload["content_ar"]
+                chunk["content_norm"] = normalize_arabic(payload["content_ar"])
+            if payload.get("article_number") is not None:
+                chunk["article_number"] = payload["article_number"]
+            if payload.get("article_label") is not None:
+                chunk["article_label"] = payload["article_label"]
+            if payload.get("heading_ar") is not None:
+                chunk["heading"] = payload["heading_ar"]
+            return {
+                "id": chunk["id"],
+                "document_id": chunk["document_id"],
+                "source_type": chunk["source_type"],
+                "article_number": chunk["article_number"],
+                "article_label": chunk["article_label"],
+                "chapter": chunk.get("chapter"),
+                "section": chunk.get("section"),
+                "heading_ar": chunk.get("heading"),
+                "content_ar": chunk["content"],
+                "chunk_index": chunk["chunk_index"],
+                "token_count": chunk["token_count"],
+            }
+        raise NotFoundError("المادة غير موجودة")
+
+    async def update_embedding(self, article_id: str | uuid.UUID, embedding: Sequence[float]) -> None:
+        if self.persistent:
+            await database.execute(
+                "update legal_articles set embedding = $2::vector where id = $1",
+                uuid.UUID(str(article_id)),
+                _vector_literal(embedding),
+            )
+            return
+        store = self._memory()
+        if store is not None:
+            for chunk in store.chunks.values():
+                if str(chunk["id"]) == str(article_id):
+                    chunk["embedding"] = list(embedding)
+                    return
+
+    def reset(self) -> None:
+        self._documents.clear()
+        self._articles.clear()
+
+
+legal_document_admin_repository = LegalDocumentAdminRepository()
 
 
 def _vector_literal(values: Sequence[float]) -> str:

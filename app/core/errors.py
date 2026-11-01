@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import FastAPI, Request
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
@@ -52,6 +53,27 @@ class GroundingError(LegalAIError):
     code = "grounding_error"
 
 
+class UnauthorizedError(LegalAIError):
+    """Raised when a request carries no valid credentials."""
+
+    status_code = 401
+    code = "unauthorized"
+
+
+class ForbiddenError(LegalAIError):
+    """Raised when an authenticated user lacks the required role."""
+
+    status_code = 403
+    code = "forbidden"
+
+
+class ConflictError(LegalAIError):
+    """Raised when a unique constraint or duplicate resource is detected."""
+
+    status_code = 409
+    code = "conflict"
+
+
 def _payload(code: str, message: str, details: Any = None) -> dict[str, Any]:
     body: dict[str, Any] = {"error": {"code": code, "message": message}}
     if details is not None:
@@ -69,8 +91,17 @@ def register_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(RequestValidationError)
     async def _validation(_: Request, exc: RequestValidationError) -> JSONResponse:
+        # ``exc.errors()`` may embed non-serialisable objects (e.g. the ValueError
+        # raised by a custom validator), so fall back to a sanitised view.
+        try:
+            details = jsonable_encoder(exc.errors())
+        except Exception:
+            details = [
+                {"type": err.get("type"), "loc": list(err.get("loc", [])), "msg": err.get("msg")}
+                for err in exc.errors()
+            ]
         return JSONResponse(
-            content=_payload("request_validation_error", "البيانات المُرسلة غير صحيحة", exc.errors()),
+            content=_payload("request_validation_error", "البيانات المُرسلة غير صحيحة", details),
             status_code=422,
         )
 

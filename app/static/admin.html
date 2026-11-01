@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>لوحة التحكم — منصة الذكاء الاصطناعي القانوني</title>
+<style>
+  :root{
+    --bg:#0f1720; --panel:#17212b; --panel2:#1e2a36; --line:#2c3a49;
+    --ink:#e8eef5; --muted:#93a4b6; --gold:#c8a24a; --gold2:#e0be6a;
+    --ok:#7fd8a3; --bad:#e58b8b;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:"Segoe UI","Noto Naskh Arabic",Tahoma,sans-serif;line-height:1.7}
+  header{background:linear-gradient(135deg,#132030,#1b2b3c);border-bottom:2px solid var(--gold);
+    padding:18px 26px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px}
+  header h1{margin:0;font-size:20px;color:var(--gold2)}
+  header p{margin:4px 0 0;color:var(--muted);font-size:13px}
+  .wrap{max-width:1240px;margin:0 auto;padding:20px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px;margin-bottom:16px}
+  .card h2{margin:0 0 14px;font-size:16px;color:var(--gold2);border-bottom:1px solid var(--line);padding-bottom:9px}
+  label{display:block;font-size:13px;color:var(--muted);margin:10px 0 4px}
+  input,textarea,select{width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--ink);
+    border-radius:8px;padding:9px 11px;font-family:inherit;font-size:14px}
+  input:focus,textarea:focus,select:focus{outline:none;border-color:var(--gold)}
+  textarea{min-height:70px;resize:vertical}
+  button{background:linear-gradient(135deg,var(--gold),#a8823a);color:#12181f;border:0;border-radius:8px;
+    padding:10px 20px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit}
+  button:hover{filter:brightness(1.1)}
+  button:disabled{opacity:.55;cursor:wait}
+  button.ghost{background:transparent;border:1px solid var(--line);color:var(--muted);
+    padding:7px 14px;font-size:13px;font-weight:500}
+  button.danger{background:linear-gradient(135deg,#b4544f,#8d3c38);color:#fff}
+  button.sm{padding:5px 11px;font-size:12px}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+  @media(max-width:820px){.row,.row3{grid-template-columns:1fr}}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin-top:8px}
+  th,td{text-align:right;padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--gold2);font-weight:600;background:var(--panel2)}
+  .muted{color:var(--muted);font-size:13px}
+  .pill{display:inline-block;border-radius:20px;padding:2px 11px;font-size:11px;font-weight:700;border:1px solid}
+  .pill.owner{background:#3a2f14;color:var(--gold2);border-color:#6b5a26}
+  .pill.admin{background:#1c2f3a;color:#8ecbe5;border-color:#2f5a6b}
+  .pill.editor{background:#1c3a28;color:var(--ok);border-color:#2f6b47}
+  .pill.reviewer{background:#2a2138;color:#c0a8e5;border-color:#4c3f6b}
+  .pill.viewer{background:#26313c;color:var(--muted);border-color:var(--line)}
+  .msg{padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:12px;display:none}
+  .msg.on{display:block}
+  .msg.ok{background:#1c3a28;border:1px solid #2f6b47;color:var(--ok)}
+  .msg.err{background:#3a1f1f;border:1px solid #6b2f2f;color:var(--bad)}
+  .tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+  .tabs button{background:transparent;border:1px solid var(--line);color:var(--muted);font-weight:500}
+  .tabs button.active{background:linear-gradient(135deg,var(--gold),#a8823a);color:#12181f;border-color:transparent;font-weight:700}
+  .hidden{display:none}
+  .link{color:var(--gold2);text-decoration:none;font-size:13px}
+  .link:hover{text-decoration:underline}
+  .mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;direction:ltr;text-align:left}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>لوحة تحكم المنصة <span class="muted" style="font-size:13px">— الجمهورية اليمنية</span></h1>
+    <p>إدارة الأقسام والقوانين والمواد والمستخدمين والصلاحيات</p>
+  </div>
+  <div style="display:flex;gap:10px;align-items:center">
+    <a class="link" href="/">← واجهة المنصة</a>
+    <a class="link" href="/docs" target="_blank">وثائق API</a>
+    <span id="whoami" class="muted"></span>
+    <button class="ghost hidden" id="logoutBtn">خروج</button>
+  </div>
+</header>
+
+<div class="wrap">
+  <div id="msg" class="msg"></div>
+
+  <!-- تسجيل الدخول -->
+  <div class="card" id="loginCard">
+    <h2>تسجيل الدخول</h2>
+    <p class="muted">يدخل مالك المنصة أو المدير لإدارة الأقسام والقوانين والمواد والمستخدمين.
+      حساب المالك يُنشأ تلقائياً عند أول تشغيل (يُضبط عبر متغيّرات البيئة OWNER_USERNAME / OWNER_PASSWORD).</p>
+    <div class="row">
+      <div><label>اسم المستخدم</label><input id="u" autocomplete="username"></div>
+      <div><label>كلمة المرور</label><input id="p" type="password" autocomplete="current-password"></div>
+    </div>
+    <div style="margin-top:14px"><button id="loginBtn">دخول</button></div>
+  </div>
+
+  <!-- التطبيق -->
+  <div id="app" class="hidden">
+    <div class="tabs">
+      <button data-tab="sections" class="active">الأقسام</button>
+      <button data-tab="laws">القوانين</button>
+      <button data-tab="articles">المواد</button>
+      <button data-tab="users">المستخدمون والصلاحيات</button>
+      <button data-tab="roles">الأدوار</button>
+    </div>
+
+    <!-- الأقسام -->
+    <section id="tab-sections">
+      <div class="card">
+        <h2>إضافة قسم جديد</h2>
+        <div class="row3">
+          <div><label>المعرّف (بالإنجليزية)</label><input id="sKey" placeholder="labour"></div>
+          <div><label>الاسم بالعربية</label><input id="sTitle" placeholder="قانون العمل"></div>
+          <div><label>الترتيب</label><input id="sOrder" type="number" value="100"></div>
+        </div>
+        <label>الوصف</label><textarea id="sDesc"></textarea>
+        <div style="margin-top:12px"><button id="sAdd">إضافة القسم</button></div>
+      </div>
+      <div class="card"><h2>الأقسام الحالية</h2><table id="sTable"></table></div>
+    </section>
+
+    <!-- القوانين -->
+    <section id="tab-laws" class="hidden">
+      <div class="card">
+        <h2>إدخال نص قانون كامل</h2>
+        <p class="muted">يُقطّع النص إلى مواد ويُضمَّن تلقائياً في قاعدة المتجهات. يُستبدل أي إصدار سابق لنفس القانون.</p>
+        <div class="row3">
+          <div><label>نوع المصدر</label>
+            <select id="lSource">
+              <option value="civil_law">القانون المدني</option>
+              <option value="commercial_law">القانون التجاري</option>
+              <option value="criminal_law">قانون الجرائم والعقوبات</option>
+              <option value="criminal_procedure">الإجراءات الجزائية</option>
+              <option value="civil_procedure">المرافعات والتنفيذ المدني</option>
+              <option value="evidence_law">قانون الإثبات</option>
+              <option value="family_law">الأحوال الشخصية</option>
+              <option value="constitution">الدستور</option>
+              <option value="other">أخرى</option>
+            </select></div>
+          <div><label>اسم القانون</label><input id="lTitle" placeholder="قانون العمل رقم (5) لسنة 1995م"></div>
+          <div><label>القسم</label><select id="lSection"></select></div>
+        </div>
+        <div class="row3">
+          <div><label>رقم القانون</label><input id="lNumber" placeholder="5"></div>
+          <div><label>سنة الإصدار</label><input id="lYear" type="number" placeholder="1995"></div>
+          <div><label>رابط المصدر الرسمي</label><input id="lUrl" placeholder="http://www.yemen-nic.info/..."></div>
+        </div>
+        <label>نص القانون (المادة/المواد كما وردت حرفياً)</label>
+        <textarea id="lText" style="min-height:180px" placeholder="الصق هنا نص القانون الرسمي دون تعديل…"></textarea>
+        <div style="margin-top:12px"><button id="lAdd">إدخال القانون</button></div>
+      </div>
+      <div class="card"><h2>القوانين المخزّنة</h2><table id="lTable"></table></div>
+    </section>
+
+    <!-- المواد -->
+    <section id="tab-articles" class="hidden">
+      <div class="card">
+        <h2>مواد القانون</h2>
+        <div class="row">
+          <div><label>اختر القانون</label><select id="aDoc"></select></div>
+          <div><label>بحث في المواد</label><input id="aSearch" placeholder="رقم المادة أو نص"></div>
+        </div>
+        <div style="margin-top:12px"><button id="aLoad">عرض المواد</button></div>
+      </div>
+      <div class="card"><table id="aTable"></table></div>
+    </section>
+
+    <!-- المستخدمون -->
+    <section id="tab-users" class="hidden">
+      <div class="card">
+        <h2>إنشاء مستخدم</h2>
+        <div class="row3">
+          <div><label>اسم المستخدم</label><input id="nuUser"></div>
+          <div><label>كلمة المرور</label><input id="nuPass" type="password"></div>
+          <div><label>الدور</label>
+            <select id="nuRole">
+              <option value="admin">مدير</option>
+              <option value="editor">محرر</option>
+              <option value="reviewer">مراجع</option>
+              <option value="viewer" selected>مطّلع</option>
+            </select></div>
+        </div>
+        <div class="row">
+          <div><label>الاسم الكامل</label><input id="nuName"></div>
+          <div><label>البريد الإلكتروني</label><input id="nuEmail"></div>
+        </div>
+        <div style="margin-top:12px"><button id="nuAdd">إنشاء المستخدم</button></div>
+      </div>
+      <div class="card"><h2>المستخدمون</h2><table id="uTable"></table></div>
+    </section>
+
+    <!-- الأدوار -->
+    <section id="tab-roles" class="hidden">
+      <div class="card"><h2>أدوار المنصة وصلاحياتها</h2><div id="rolesBox"></div></div>
+    </section>
+  </div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => (s ?? '').toString().replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const ROLE_AR = {owner:'مالك المنصة', admin:'مدير', editor:'محرر', reviewer:'مراجع', viewer:'مطّلع'};
+let TOKEN = sessionStorage.getItem('legal_token') || '';
+let ME = null;
+
+function msg(text, kind='ok'){
+  const m = $('#msg'); m.className = 'msg on ' + kind; m.textContent = text;
+  clearTimeout(m._t); m._t = setTimeout(() => { m.className = 'msg'; }, 5000);
+}
+async function api(path, opts={}){
+  const res = await fetch('/api/v1' + path, {
+    ...opts,
+    headers: {'Content-Type':'application/json', ...(TOKEN ? {Authorization:'Bearer ' + TOKEN} : {}), ...(opts.headers||{})}
+  });
+  let body = null;
+  try { body = await res.json(); } catch(e){}
+  if (!res.ok){
+    const m = (body && body.error && body.error.message) || ('فشل الطلب (' + res.status + ')');
+    throw new Error(m);
+  }
+  return body;
+}
+
+async function login(){
+  const username = $('#u').value.trim(), password = $('#p').value;
+  if (!username || !password) return msg('أدخل اسم المستخدم وكلمة المرور', 'err');
+  $('#loginBtn').disabled = true;
+  try{
+    const d = await api('/auth/login', {method:'POST', body: JSON.stringify({username, password})});
+    TOKEN = d.access_token; sessionStorage.setItem('legal_token', TOKEN);
+    ME = d.user; $('#p').value = '';
+    await start();
+    msg('مرحباً ' + (ME.full_name || ME.username));
+  }catch(e){ msg(e.message, 'err'); }
+  finally{ $('#loginBtn').disabled = false; }
+}
+function logout(){ TOKEN=''; ME=null; sessionStorage.removeItem('legal_token');
+  $('#app').classList.add('hidden'); $('#loginCard').classList.remove('hidden');
+  $('#logoutBtn').classList.add('hidden'); $('#whoami').textContent=''; }
+
+async function start(){
+  ME = await api('/auth/me');
+  $('#loginCard').classList.add('hidden');
+  $('#app').classList.remove('hidden');
+  $('#logoutBtn').classList.remove('hidden');
+  $('#whoami').innerHTML = `${esc(ME.full_name||ME.username)} <span class="pill ${ME.role}">${ROLE_AR[ME.role]||ME.role}</span>`;
+  await Promise.all([loadSections(), loadLaws(), loadUsers(), loadRoles()]);
+}
+
+// --- الأقسام ---
+async function loadSections(){
+  const rows = await api('/admin/sections');
+  $('#sTable').innerHTML = '<tr><th>الترتيب</th><th>المعرّف</th><th>الاسم</th><th>الحالة</th><th>إجراءات</th></tr>' +
+    rows.map(s => `<tr><td>${s.sort_order}</td><td class="mono">${esc(s.key)}</td><td>${esc(s.title_ar)}</td>
+      <td>${s.is_active ? '✅' : '⛔'}</td>
+      <td><button class="ghost sm" onclick="editSection('${s.id}','${esc(s.title_ar)}')">تعديل</button>
+          <button class="danger sm" onclick="delSection('${s.id}')">حذف</button></td></tr>`).join('');
+  const sel = $('#lSection'); sel.innerHTML = '<option value="">— بدون قسم —</option>' +
+    rows.map(s => `<option value="${s.id}">${esc(s.title_ar)}</option>`).join('');
+}
+async function addSection(){
+  try{
+    await api('/admin/sections', {method:'POST', body: JSON.stringify({
+      key: $('#sKey').value.trim(), title_ar: $('#sTitle').value.trim(),
+      description: $('#sDesc').value.trim() || null, sort_order: parseInt($('#sOrder').value||'100',10)})});
+    ['#sKey','#sTitle','#sDesc'].forEach(s => $(s).value='');
+    msg('تمت إضافة القسم'); await loadSections();
+  }catch(e){ msg(e.message, 'err'); }
+}
+async function editSection(id, current){
+  const title = prompt('الاسم الجديد للقسم:', current);
+  if (!title) return;
+  try{ await api('/admin/sections/' + id, {method:'PATCH', body: JSON.stringify({title_ar: title})});
+    msg('تم تعديل القسم'); await loadSections(); }catch(e){ msg(e.message,'err'); }
+}
+async function delSection(id){
+  if (!confirm('حذف هذا القسم؟')) return;
+  try{ await api('/admin/sections/' + id, {method:'DELETE'}); msg('تم حذف القسم'); await loadSections(); }
+  catch(e){ msg(e.message,'err'); }
+}
+
+// --- القوانين ---
+async function loadLaws(){
+  const rows = await api('/admin/laws');
+  $('#lTable').innerHTML = '<tr><th>النوع</th><th>الاسم</th><th>رقم/سنة</th><th>المواد</th><th>المصدر</th><th>إجراءات</th></tr>' +
+    rows.map(d => `<tr><td class="mono">${esc(d.source_type)}</td><td>${esc(d.title_ar)}</td>
+      <td>${esc(d.law_number||'—')} / ${d.promulgation_year||'—'}</td><td>${(d.article_count||0).toLocaleString('ar-EG')}</td>
+      <td>${d.source_url ? `<a class="link" href="${esc(d.source_url)}" target="_blank">المصدر</a>` : '<span class="muted">—</span>'}</td>
+      <td><button class="ghost sm" onclick="openArticles('${d.id}')">المواد</button>
+          <button class="danger sm" onclick="delLaw('${d.id}')">حذف</button></td></tr>`).join('');
+  $('#aDoc').innerHTML = rows.map(d => `<option value="${d.id}">${esc(d.title_ar)}</option>`).join('');
+}
+async function addLaw(){
+  try{
+    const r = await api('/admin/laws/ingest', {method:'POST', body: JSON.stringify({
+      source_type: $('#lSource').value, title_ar: $('#lTitle').value.trim(), text: $('#lText').value,
+      law_number: $('#lNumber').value.trim() || null,
+      promulgation_year: $('#lYear').value ? parseInt($('#lYear').value,10) : null,
+      source_url: $('#lUrl').value.trim() || null,
+      section_id: $('#lSection').value || null })});
+    $('#lText').value=''; $('#lTitle').value='';
+    msg(`تم الإدخال: ${r.chunks_created} مقطع، ${r.articles_detected} مادة`);
+    await loadLaws();
+  }catch(e){ msg(e.message,'err'); }
+}
+async function delLaw(id){
+  if (!confirm('حذف هذا القانون وكل مواده؟')) return;
+  try{ const r = await api('/admin/laws/' + id, {method:'DELETE'});
+    msg('تم الحذف (' + r.articles_removed + ' مادة)'); await loadLaws(); }catch(e){ msg(e.message,'err'); }
+}
+
+// --- المواد ---
+async function openArticles(id){
+  document.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab==='articles'));
+  showTab('articles'); $('#aDoc').value = id; await loadArticles();
+}
+async function loadArticles(){
+  const id = $('#aDoc').value; if (!id) return msg('اختر قانوناً', 'err');
+  const q = $('#aSearch').value.trim();
+  const rows = await api(`/admin/laws/${id}/articles?limit=200` + (q ? '&search=' + encodeURIComponent(q) : ''));
+  $('#aTable').innerHTML = '<tr><th>المادة</th><th>العنوان</th><th>النص</th><th>إجراءات</th></tr>' +
+    rows.map(a => `<tr><td class="mono">${esc(a.article_number||'—')}</td><td>${esc(a.heading_ar||'—')}</td>
+      <td style="max-width:640px">${esc((a.content_ar||'').slice(0,220))}…</td>
+      <td><button class="ghost sm" onclick="editArticle('${a.id}')">تعديل</button>
+          <button class="danger sm" onclick="delArticle('${a.id}')">حذف</button></td></tr>`).join('');
+}
+async function editArticle(id){
+  const text = prompt('النص الجديد للمادة (سيُعاد تضمينها تلقائياً):');
+  if (!text) return;
+  try{ await api('/admin/articles/' + id, {method:'PATCH', body: JSON.stringify({content_ar: text})});
+    msg('تم تعديل المادة وإعادة تضمينها'); await loadArticles(); }catch(e){ msg(e.message,'err'); }
+}
+async function delArticle(id){
+  if (!confirm('حذف هذه المادة؟')) return;
+  try{ await api('/admin/articles/' + id, {method:'DELETE'}); msg('تم حذف المادة'); await loadArticles(); }
+  catch(e){ msg(e.message,'err'); }
+}
+
+// --- المستخدمون ---
+async function loadUsers(){
+  const rows = await api('/auth/users');
+  $('#uTable').innerHTML = '<tr><th>المستخدم</th><th>الاسم</th><th>الدور</th><th>الصلاحيات</th><th>الحالة</th><th>إجراءات</th></tr>' +
+    rows.map(u => `<tr><td class="mono">${esc(u.username)}</td><td>${esc(u.full_name||'—')}</td>
+      <td><span class="pill ${u.role}">${ROLE_AR[u.role]||u.role}</span></td>
+      <td class="muted">${(u.effective_permissions||[]).length} صلاحية</td>
+      <td>${u.is_active ? '✅' : '⛔'}</td>
+      <td>${u.role==='owner' ? '<span class="muted">—</span>' :
+        `<button class="ghost sm" onclick="editUser('${u.id}','${u.role}')">الدور</button>
+         <button class="ghost sm" onclick="toggleUser('${u.id}',${!u.is_active})">${u.is_active?'تعطيل':'تنشيط'}</button>
+         <button class="danger sm" onclick="delUser('${u.id}')">حذف</button>`}</td></tr>`).join('');
+}
+async function addUser(){
+  try{
+    await api('/auth/users', {method:'POST', body: JSON.stringify({
+      username: $('#nuUser').value.trim(), password: $('#nuPass').value,
+      full_name: $('#nuName').value.trim(), email: $('#nuEmail').value.trim() || null,
+      role: $('#nuRole').value })});
+    ['#nuUser','#nuPass','#nuName','#nuEmail'].forEach(s => $(s).value='');
+    msg('تم إنشاء المستخدم'); await loadUsers();
+  }catch(e){ msg(e.message,'err'); }
+}
+async function editUser(id, role){
+  const next = prompt('الدور الجديد (admin/editor/reviewer/viewer):', role);
+  if (!next || next === role) return;
+  try{ await api('/auth/users/' + id, {method:'PATCH', body: JSON.stringify({role: next})});
+    msg('تم تحديث الدور'); await loadUsers(); }catch(e){ msg(e.message,'err'); }
+}
+async function toggleUser(id, active){
+  try{ await api('/auth/users/' + id, {method:'PATCH', body: JSON.stringify({is_active: active})});
+    msg('تم تحديث حالة الحساب'); await loadUsers(); }catch(e){ msg(e.message,'err'); }
+}
+async function delUser(id){
+  if (!confirm('حذف هذا المستخدم؟')) return;
+  try{ await api('/auth/users/' + id, {method:'DELETE'}); msg('تم حذف المستخدم'); await loadUsers(); }
+  catch(e){ msg(e.message,'err'); }
+}
+
+// --- الأدوار ---
+async function loadRoles(){
+  const roles = await api('/auth/roles');
+  $('#rolesBox').innerHTML = roles.map(r => `
+    <div style="margin-bottom:14px">
+      <div><span class="pill ${r.role}">${ROLE_AR[r.role]||r.role}</span>
+        ${r.is_owner ? '<span class="muted">— يملك كل الصلاحيات دائماً ولا يمكن تقييده أو حذفه</span>' : ''}</div>
+      <div class="muted" style="margin-top:6px">${(r.permissions||[]).map(p=>`<code class="mono">${esc(p)}</code>`).join(' · ')}</div>
+    </div>`).join('');
+}
+
+// --- التبويبات ---
+function showTab(name){
+  ['sections','laws','articles','users','roles'].forEach(t =>
+    $('#tab-' + t).classList.toggle('hidden', t !== name));
+  document.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab===name));
+}
+document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => showTab(b.dataset.tab));
+
+$('#loginBtn').onclick = login;
+$('#p').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
+$('#logoutBtn').onclick = logout;
+$('#sAdd').onclick = addSection;
+$('#lAdd').onclick = addLaw;
+$('#aLoad').onclick = loadArticles;
+$('#nuAdd').onclick = addUser;
+
+if (TOKEN) start().catch(() => logout());
+</script>
+</body>
+</html>
