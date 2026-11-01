@@ -28,21 +28,52 @@ logger = get_logger(__name__)
 
 
 class N8NClient:
-    def __init__(self) -> None:
-        self.enabled = bool(settings.n8n_enabled and settings.n8n_webhook_url)
-        self.url = settings.n8n_webhook_url
-        self.secret = settings.n8n_hmac_secret
+    """Reads its configuration lazily so a settings change takes effect.
+
+    The client is a module-level singleton built at import time. Caching the
+    URL/secret in ``__init__`` would freeze whatever the environment held at
+    import, which is brittle under reloaded settings and untestable.
+    """
+
+    @property
+    def enabled(self) -> bool:
+        return bool(settings.n8n_enabled and settings.n8n_webhook_url)
+
+    @property
+    def url(self) -> str | None:
+        return settings.n8n_webhook_url
+
+    @property
+    def secret(self) -> str | None:
+        return settings.n8n_hmac_secret
 
     def sign(self, body: bytes) -> str:
         if not self.secret:
             return ""
         return hmac.new(self.secret.encode("utf-8"), body, hashlib.sha256).hexdigest()
 
-    def verify(self, body: bytes, signature: str) -> bool:
+    def verify_signature(self, body: bytes, signature: str) -> bool:
+        """Verify the HMAC over a body, as sent by an external caller.
+
+        Used for outbound deliveries we later confirm, and for any inbound
+        webhook that signs its body. Compared in constant time.
+        """
         if not self.secret:
             return True
         expected = self.sign(body)
         return hmac.compare_digest(expected, signature or "")
+
+    def verify_token(self, token: str | None) -> bool:
+        """Check the shared secret n8n sends in ``X-N8N-Secret``.
+
+        This is a bearer token, not a signature: n8n echoes the configured
+        secret. Comparing it with ``verify_signature`` (which hashes the value
+        before comparing) can never match, so it is compared directly, in
+        constant time. When no secret is configured, inbound auth is open.
+        """
+        if not self.secret:
+            return True
+        return hmac.compare_digest(self.secret, token or "")
 
     async def emit(self, event: str, payload: dict[str, Any]) -> bool:
         if not self.enabled:

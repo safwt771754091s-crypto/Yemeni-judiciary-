@@ -77,7 +77,7 @@ async def submit_intake(
     include_full_text: Annotated[bool, Form()] = False,
     x_n8n_secret: Annotated[str | None, Header(alias="X-N8N-Secret")] = None,
 ) -> IntakeResponse:
-    if x_n8n_secret is not None and not n8n.verify(x_n8n_secret.encode(), x_n8n_secret):
+    if not n8n.verify_token(x_n8n_secret):
         raise HTTPException(status_code=401, detail="X-N8N-Secret غير صحيح")
 
     import time

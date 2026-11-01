@@ -47,7 +47,7 @@ async def submit_case(
     n8n: N8NDep,
     x_n8n_secret: str | None = Header(default=None, alias="X-N8N-Secret"),
 ) -> CaseSubmissionResponse:
-    if x_n8n_secret is not None and not n8n.verify(x_n8n_secret.encode(), x_n8n_secret):
+    if not n8n.verify_token(x_n8n_secret):
         raise HTTPException(status_code=401, detail="X-N8N-Secret غير صحيح")
 
     response = await pipeline.submit(payload)

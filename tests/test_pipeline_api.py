@@ -213,3 +213,46 @@ async def test_api_response_exposes_citation_provenance(seeded_store, sample_cas
         assert "source_url" in article
         assert "verbatim" in article
         assert article["content"], "the cited text itself must be returned"
+
+
+# --------------------------------------------------------------------------- #
+# n8n inbound auth contract (regression: the check hashed the token, so a
+# correct X-N8N-Secret was always rejected with 401)
+# --------------------------------------------------------------------------- #
+async def test_submit_accepts_the_configured_n8n_secret(
+    seeded_store, sample_case_payload, client, monkeypatch
+):
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "n8n_hmac_secret", "s3cret")
+    ok = await client.post(
+        "/api/v1/cases/submit",
+        json=sample_case_payload,
+        headers={"X-N8N-Secret": "s3cret"},
+    )
+    assert ok.status_code == 201
+
+
+async def test_submit_rejects_a_wrong_n8n_secret(
+    seeded_store, sample_case_payload, client, monkeypatch
+):
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "n8n_hmac_secret", "s3cret")
+    bad = await client.post(
+        "/api/v1/cases/submit",
+        json=sample_case_payload,
+        headers={"X-N8N-Secret": "nope"},
+    )
+    assert bad.status_code == 401
+
+
+async def test_submit_without_the_header_still_works_when_no_secret(
+    seeded_store, sample_case_payload, client, monkeypatch
+):
+    """The header is optional; only a configured secret makes it mandatory."""
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "n8n_hmac_secret", None)
+    ok = await client.post("/api/v1/cases/submit", json=sample_case_payload)
+    assert ok.status_code == 201
