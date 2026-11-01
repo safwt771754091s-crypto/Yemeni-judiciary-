@@ -134,3 +134,75 @@ class TestRobustness:
     def test_handles_odd_whitespace(self, filler):
         d = case_details_extractor.extract(f"{filler}المدعي: علي محمد{filler}")
         assert d.plaintiff_name == "علي محمد"
+
+
+# --------------------------------------------------------------------------- #
+# Structural metadata must not leak into the extracted facts/subject
+# --------------------------------------------------------------------------- #
+def test_document_header_is_not_captured_as_facts():
+    """combine_text labels each upload with "=== مستند: x ===".
+
+    That separator is transport metadata. It sits directly above the facts and
+    was being captured as the facts summary, which then got searched for.
+    """
+    from app.services.case_details import case_details_extractor
+
+    text = (
+        "=== مستند: case4.txt ===\n"
+        "المحكمة الابتدائية بأمانة العاصمة - الدائرة الجزائية\n"
+        "القضية رقم 7788/2026\n"
+        "أحالت النيابة العامة المتهم بتهمة الاعتداء على سلامة الجسم وإحداث عاهة مستديمة.\n"
+    )
+    details = case_details_extractor.extract(text)
+    assert details.facts_summary is not None
+    assert "مستند" not in details.facts_summary
+    assert "===" not in details.facts_summary
+    assert "سلامة الجسم" in details.facts_summary
+
+
+def test_facts_skip_court_header_and_case_number():
+    from app.services.case_details import case_details_extractor
+
+    text = (
+        "المحكمة الابتدائية بأمانة العاصمة - الدائرة الجزائية\n"
+        "القضية رقم 8822/2026\n\n"
+        "أحالت النيابة العامة المتهم بتهمة الاعتداء على سلامة الجسم "
+        "وإحداث عاهة مستديمة بالمجني عليه باستعمال آلة حادة."
+    )
+    details = case_details_extractor.extract(text)
+    assert details.facts_summary is not None
+    assert "8822/2026" not in details.facts_summary
+    assert "عاهة مستديمة" in details.facts_summary
+
+
+def test_structural_paragraph_detector():
+    from app.services.case_details import _is_structural_paragraph
+
+    assert _is_structural_paragraph(
+        "المحكمة الابتدائية بأمانة العاصمة - الدائرة الجزائية\nالقضية رقم 8822/2026"
+    )
+    assert _is_structural_paragraph("المدعي: النيابة العامة\nالمتهم: سامي عبده قائد")
+    assert not _is_structural_paragraph(
+        "بتهمة الاعتداء على سلامة الجسم وإحداث عاهة مستديمة بالمجني عليه"
+    )
+
+
+def test_strip_structural_prefix_keeps_mid_text_court_reference():
+    """Only a leading heading is removed; a court reference in the narrative stays."""
+    from app.services.case_details import _strip_structural_prefix
+
+    cleaned = _strip_structural_prefix(
+        "المحكمة الابتدائية - القضية رقم 55/2026 أحالت النيابة العامة المتهم إلى المحكمة"
+    )
+    assert "55/2026" not in cleaned
+    assert "أحالت النيابة العامة" in cleaned
+    assert cleaned.endswith("المحكمة")
+
+
+def test_section_item_drops_marker_separator():
+    """The colon after "الطلبات" is the marker's own punctuation, not the demand."""
+    from app.services.case_details import case_details_extractor
+
+    details = case_details_extractor.extract("الطلبات: إدانة المتهم وتوقيع العقوبة المقررة قانوناً")
+    assert details.claims
+    assert not details.claims[0].startswith(":")

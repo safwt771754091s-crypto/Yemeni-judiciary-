@@ -85,6 +85,73 @@ _REPRESENTATIVE_RE = re.compile(
 )
 _WITNESS_RE = re.compile(r"(?:شاهد|الشهود|شهادة)\s*[:：]?\s*([^\n]{3,120})")
 
+# The per-document separator injected by ``IntakeService.combine_text``. It is
+# not part of the filing and must never reach the field patterns.
+_DOCUMENT_HEADER_RE = re.compile(r"^[ \t]*={2,}\s*مستند\s*:[^\n]*$", re.MULTILINE)
+
+# A paragraph made only of the court heading, the case number and the party
+# labels. It describes the file, not the dispute, so it is not a usable facts
+# summary. Each pattern strips one structural fragment; whatever survives is
+# measured to decide whether any narrative is left.
+_STRUCTURAL_FRAGMENTS: tuple[re.Pattern[str], ...] = (
+    # The heading runs until the case number, a newline or the end of the text -
+    # not until 80 arbitrary characters, which would swallow the narrative.
+    re.compile(r"(?:المحكمة|محكمة)[^\n]{0,60}?(?=\n|القضية|الدعوى|رقم|$)"),
+    re.compile(r"(?:القضية|الدعوى)\s*(?:رقم|ر\.)\s*[:：]?\s*[0-9\u0660-\u0669/\s]{1,20}"),
+    re.compile(r"رقم\s+القضية\s*[:：]?\s*[0-9\u0660-\u0669/\s]{1,20}"),
+    re.compile(
+        r"(?:المدعي|المدعى\s*عليه|المتهم|المتهمون|المجني\s*عليه|المشتكي|المدعية)"
+        r"\s*[:：]\s*[^\n]{0,60}"
+    ),
+    re.compile(r"^\s*(?:الدائرة|دائرة)\s*[:：]?\s*[^\n]{0,60}", re.MULTILINE),
+)
+
+
+def _is_structural_paragraph(paragraph: str) -> bool:
+    """True when a paragraph is court/case/party metadata with no narrative."""
+    remainder = paragraph
+    for pattern in _STRUCTURAL_FRAGMENTS:
+        remainder = pattern.sub(" ", remainder)
+    remainder = re.sub(r"[\s\-–—:،.]+", "", remainder)
+    return len(remainder) < 25
+
+
+# "المدعي: ..." / "المتهم ..." lines are labels, not narrative.
+_PARTY_LABEL_RE = re.compile(
+    r"(?:^|[\n\s])(?:المدعي|المدعى\s*عليه|المتهم|المتهمون|المجني\s*عليه|المشتكي|المدعية)"
+    r"\s*[:：]\s*[^\n]{0,60}",
+)
+
+
+def _strip_structural_prefix(paragraph: str) -> str:
+    """Drop the court/case/party metadata that opens a facts paragraph.
+
+    A short filing often runs the heading straight into the narrative with no
+    blank line between them, so the selected paragraph still begins with
+    "المحكمة ... القضية رقم ...". That prefix is structural; leading the facts
+    with it both buries the offence and feeds the header to retrieval.
+
+    Fragments are removed only while they sit at the very start, so a court
+    reference later in the narrative ("أحالت النيابة العامة المتهم إلى
+    المحكمة") is left untouched.
+    """
+    text = paragraph.lstrip()
+    changed = True
+    while changed:
+        changed = False
+        for pattern in _STRUCTURAL_FRAGMENTS:
+            match = pattern.match(text)
+            if match and match.end() > 0:
+                text = text[match.end() :].lstrip(" \n-–—:،.")
+                changed = True
+                break
+    return text or paragraph
+
+
+def _strip_party_labels(text: str) -> str:
+    """Remove "المدعي: ..." style labels, which are metadata, not narrative."""
+    return re.sub(r"\s+", " ", _PARTY_LABEL_RE.sub(" ", text)).strip()
+
 #: Phrases that open a statutory-basis line ("وفقاً للمادة 146 ..."). They close
 #: the الطلبات block: a citation is an authority, not a demand.
 CITATION_MARKERS: tuple[str, ...] = (
@@ -153,6 +220,11 @@ class CaseDetailsExtractor:
             return details
 
         working = text.replace("\u00a0", " ").replace("\r\n", "\n")
+        # ``combine_text`` labels each uploaded document with a "=== مستند: x ==="
+        # separator. It is transport metadata, not case content, but it sits
+        # directly above the facts and was being captured as the facts/subject
+        # (and then searched for). Drop it before any pattern runs.
+        working = _DOCUMENT_HEADER_RE.sub("\n", working)
         western = to_western_digits(working)
 
         details.court_name = self._first(COURT_PATTERNS, western, clean=True)
@@ -322,7 +394,8 @@ class CaseDetailsExtractor:
                 continue
             tail = text[index + len(marker) : index + len(marker) + 3000]
             for line in tail.split("\n"):
-                candidate = line.strip(" .-–—•\t")
+                # The marker's own separator ("الطلبات: ...") is not part of the item.
+                candidate = line.lstrip(" :：").strip(" .-–—•\t")
                 if any(candidate.startswith(sm) for sm in stop_markers):
                     break
                 stripped = re.sub(r"^[0-9\u0660-\u0669]+\s*[\.\)\-–]\s*", "", candidate)
@@ -341,7 +414,14 @@ class CaseDetailsExtractor:
 
     @staticmethod
     def _facts(text: str) -> str | None:
-        """Take the paragraph after a facts marker, else the longest paragraph."""
+        """Take the paragraph after a facts marker, else the longest one.
+
+        A filing that carries no الوقائع heading still has a narrative, but it
+        competes with the court header and the case-number line. Those are
+        structural, so they are skipped: taking "المحكمة الابتدائية ... القضية
+        رقم ..." as the facts both loses the offence and feeds the header to
+        retrieval, which is how a scanned case ends up citing the wrong code.
+        """
         for marker in FACTS_MARKERS:
             index = text.find(marker)
             if index == -1:
@@ -352,9 +432,12 @@ class CaseDetailsExtractor:
             if len(paragraph) >= 30:
                 return re.sub(r"\s+", " ", paragraph)[:2000]
         paragraphs = [p.strip() for p in re.split(r"\n\s*\n", text) if len(p.strip()) >= 60]
-        if paragraphs:
-            longest = max(paragraphs, key=len)
-            return re.sub(r"\s+", " ", longest)[:2000]
+        substantive = [p for p in paragraphs if not _is_structural_paragraph(p)]
+        candidates = substantive or paragraphs
+        if candidates:
+            longest = max(candidates, key=len)
+            cleaned = _strip_party_labels(_strip_structural_prefix(longest))
+            return re.sub(r"\s+", " ", cleaned)[:2000] or None
         return None
 
     @staticmethod
