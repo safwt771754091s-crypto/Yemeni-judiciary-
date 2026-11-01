@@ -7,7 +7,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 RUN apt-get update \
- && apt-get install -y --no-install-recommends build-essential curl \
+ && apt-get install -y --no-install-recommends \
+      build-essential curl \
+      tesseract-ocr tesseract-ocr-ara tesseract-ocr-eng \
+      fonts-noto-core \
  && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .

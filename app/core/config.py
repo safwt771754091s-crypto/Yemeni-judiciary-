@@ -64,6 +64,24 @@ class Settings(BaseSettings):
     # --- uploads ---
     max_upload_mb: int = 25
     upload_dir: str = "./var/uploads"
+    max_upload_files: int = 10
+    max_case_text_chars: int = 200_000
+
+    # --- document extraction / OCR ---
+    # Scanned Yemeni court filings carry no text layer, so OCR is the only way
+    # to read them. Set OCR_ENABLED=false where Tesseract is not installed.
+    ocr_enabled: bool = True
+    ocr_languages: str = "ara+eng"
+    ocr_dpi: int = 300
+    ocr_psm: int = 6
+    # A PDF page whose embedded text layer yields fewer characters than this is
+    # re-read with OCR (typical of scanned filings).
+    pdf_text_min_chars: int = 80
+
+    # --- intake / classification ---
+    # Below this score the intake response flags the case type for human review.
+    classification_min_confidence: float = 0.35
+    intake_auto_judgment: bool = True
 
     # --- auth / RBAC ---
     # Signing key for access tokens. MUST be set in production; the default is

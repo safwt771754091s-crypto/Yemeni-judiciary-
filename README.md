@@ -5,6 +5,14 @@
 (RAG) من قاعدة متجهات Supabase/pgvector، يقيّم الأدلة وفق قانون الإثبات اليمني،
 ثم يولّد **مسودة حكم قضائي** مُهيكلة (الديباجة، الوقائع، الأسباب والحيثيات، المنطوق).
 
+**ارفع أوراق القضية والنظام يتولّى الباقي.** نقطة النهاية `/api/v1/cases/intake`
+تقبل ملفات القضية (PDF أو صور ممسوحة ضوئياً أو Word أو نصاً)، فتقوم بـ: **استخراج
+النص** (مع **تعرّف ضوئي عربي** للنصوص الممسوحة)، ثم **تفصيل الدعوى (تفصيل الدعوى)**
+— الأطراف والوكلاء والمحكمة ورقم القضية والطلبات والدفوع والوقائع وقيمة الدعوى —
+ثم **تصنيف الدعوى** (مدني/تجاري/جنائي/أسري/عمالي/إداري/عقاري/تنفيذ) وتحديد القوانين
+الواجبة التطبيق، ثم الاسترجاع الدلالي وتقييم الأدلة وتوليد مسودة الحكم. ولا يُختلق
+أي حقل: ما تعذّر استخراجه يُدرج في `needs_human_review` ليؤكده القاضي.
+
 > ⚠️ **تنبيه قانوني:** المخرجات **مسودات آلية** لا تُعدّ أحكاماً قضائية ولا تُعتد بها
 > إلا بعد مراجعتها واعتمادها من القاضي المختص. النظام مصمَّم لمنع الاستشهاد بأي نص
 > غير موجود في المدونة القانونية، ويُصرّح بمواطن القصور بدل التخمين.
@@ -14,27 +22,39 @@
 ## 1. المعمارية
 
 ```
-                     POST /api/v1/cases/submit
-                                │
-        ┌───────────────────────┴───────────────────────┐
-        ▼                                               ▼
-  CaseRepository                                  RetrievalService  ◄── RAG
-  (cases + case_evidence)                     (query planning → hybrid search)
-        │                                               │
-        │                                    Supabase / pgvector
-        │                                    match_legal_articles()
-        │                                    (dense + Arabic FTS + trigram, RRF)
-        ▼                                               ▼
-  EvidenceService  ◄──────────── retrieved statutes ───────────────┐
-  (قانون الإثبات اليمني: rule layer + LLM)                          │
-        │                                                          │
-        ▼                                                          │
-  JudgmentService ────────────────────────────────────────────────►┘
-  (prompt grounded ONLY in retrieved statutes)
-        │
-        ├── CitationValidator  (يحذف كل استشهاد لا سند له + تحقق الاقتباس)
-        ├── render_markdown    (مسودة حكم رسمية)
-        └── PostgreSQL: judgments + audit_log   ──► n8n webhook (HMAC)
+                     POST /api/v1/cases/intake            POST /api/v1/cases/submit
+                                │                                    │
+                    ┌───────────┴───────────┐                        │
+                    ▼                       ▼                        │
+        DocumentExtraction          (نص مُلصَق)                      │
+        (PDF/صورة/Word → OCR)           │                           │
+                    └───────────┬───────────┘                        │
+                                ▼                                    │
+                    CaseDetailsExtractor                             │
+                    (الأطراف، الطلبات، الدفوع، الوقائع، القيمة)      │
+                                ▼                                    │
+                    CaseClassifier (المعجم اليمني)                   │
+                    (مدني/جنائي/تجاري/… + القوانين الواجبة)          │
+                                ▼                                    │
+                    ┌───────────────────────┴───────────────────────┐
+                    ▼                                               ▼
+              CaseRepository                                  RetrievalService  ◄── RAG
+              (cases + case_evidence)                     (query planning → hybrid search)
+                    │                                               │
+                    │                                    Supabase / pgvector
+                    │                                    match_legal_articles()
+                    │                                    (dense + Arabic FTS + trigram, RRF)
+                    ▼                                               ▼
+              EvidenceService  ◄──────────── retrieved statutes ───────────────┐
+              (قانون الإثبات اليمني: rule layer + LLM)                          │
+                    │                                                          │
+                    ▼                                                          │
+              JudgmentService ────────────────────────────────────────────────►┘
+              (prompt grounded ONLY in retrieved statutes)
+                    │
+                    ├── CitationValidator  (يحذف كل استشهاد لا سند له + تحقق الاقتباس)
+                    ├── render_markdown    (مسودة حكم رسمية)
+                    └── PostgreSQL: judgments + audit_log   ──► n8n webhook (HMAC)
 ```
 
 ### الطبقات
@@ -69,6 +89,15 @@
 - Python 3.11+ (تم التطوير على 3.12/3.13)
 - مشروع Supabase (PostgreSQL + pgvector) — أو Postgres محلي عبر docker-compose
 - مفتاح مزوّد ذكاء اصطناعي (OpenAI أو Anthropic) للإنتاج — اختياري للتطوير
+- **Tesseract OCR مع حزمة اللغة العربية** (لاستخراج النصوص من الأوراق الممسوحة ضوئياً):
+  ```bash
+  # Debian/Ubuntu
+  sudo apt-get install -y tesseract-ocr tesseract-ocr-ara tesseract-ocr-eng
+  # macOS
+  brew install tesseract tesseract-lang
+  ```
+  اختياري: عند غيابه اضبط `OCR_ENABLED=false`، ويعمل الاستلام على الملفات الرقمية
+  (PDF ذي طبقة نصية، Word، النص المُلصَق) مع الإفصاح عن عدم قراءة الممسوحات.
 
 ---
 
@@ -317,6 +346,99 @@ curl http://localhost:8000/api/v1/ingestion/stats | python -m json.tool
 
 ---
 
+### استلام قضية من ملفات مرفوعة (تفصيل + تصنيف + مسودة)
+
+المسار الأبسط: ارفع أوراق القضية (PDF أو صورة ممسوحة أو Word أو نص) وسيقوم النظام
+بالخطوات الخمس كاملةً دون أي إدخال آخر:
+
+```bash
+# 1. الحصول على رمز الوصول (أو استخدم مفتاح خدمة للأنظمة الآلية)
+TOKEN=$(curl -s -X POST http://localhost:8000/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"owner","password":"'"$OWNER_PASSWORD"'"}' | jq -r .access_token)
+
+# 2. رفع أوراق القضية
+curl -X POST http://localhost:8000/api/v1/cases/intake \
+  -H "Authorization: Bearer $TOKEN" \
+  -F "files=@عقد_البيع.pdf" \
+  -F "files=@صورة_الإنذار.jpg" \
+  -F "generate_judgment=true"
+```
+
+يقوم النظام تلقائياً بـ:
+
+1. **استخراج النص** — طبقة نصية إن وُجدت، وإلا **تعرّف ضوئي عربي (OCR)** عبر Tesseract.
+2. **تفصيل الدعوى (تفصيل الدعوى)** — المحكمة، الدائرة، رقم القضية، تاريخ الجلسة،
+   الأطراف ووكلاؤهم، موضوع الدعوى، قيمة الدعوى وعملتها، الطلبات، الدفوع، الوقائع،
+   والمواد التي استند إليها الطرفان.
+3. **تصنيف الدعوى** — مدني/تجاري/جنائي/أسري/عمالي/إداري/عقاري/تنفيذ، وتحديد القوانين
+   الواجبة التطبيق (مثال: الجنائي ← قانون الجرائم والعقوبات + الإجراءات الجزائية + الإثبات).
+4. **الاسترجاع الدلالي (RAG)** — بحث هجين (متجهات + FTS عربي + trigram مدموجة بـ RRF)
+   في المواد القانونية اليمنية.
+5. **تقييم الأدلة وتوليد المسودة** — تقييم وفق قانون الإثبات، ثم مسودة حكم مُسنَدة
+   يخضع كل استشهاد فيها لتحقق حرفي.
+
+نموذج الاستجابة (مختصر):
+
+```json
+{
+  "status": "judgment_ready",
+  "classification": {
+    "case_type": "جنائي",
+    "label_ar": "جنائي",
+    "confidence": 0.92,
+    "criminal_flag": true,
+    "source_types": ["criminal_law", "criminal_procedure", "evidence_law"]
+  },
+  "details": {
+    "court_name": "المحكمة الابتدائية - الدائرة الجزائية",
+    "case_number": "2201/2026",
+    "plaintiff_name": "النيابة العامة",
+    "defendant_name": "سامي عبده قائد",
+    "subject_matter": "إدانة المتهم بجريمة الاعتداء على سلامة الجسم",
+    "claims": ["إدانة المتهم بجريمة الاعتداء على سلامة الجسم"],
+    "defences": ["ينكر المتهم ما نُسب إليه"],
+    "legal_basis": ["236"],
+    "confidence": 0.9
+  },
+  "needs_human_review": ["رقم القضية"],
+  "case_id": "…",
+  "judgment_id": "…",
+  "pipeline": { "retrieved_articles": ["…"], "grounding_score": 1.0 }
+}
+```
+
+**تجاوز أي حقل مستخرج:** أرسل الحقل ضمن النموذج (form field) وسيحلّ محلّ القيمة
+المستخرجة، مثال: `-F "plaintiff_name=الاسم الصحيح" -F "claim_value=5000000"`.
+
+**الحقول التي يلزم تأكيدها بشرياً** تُعاد في `needs_human_review` (مثل غياب اسم أحد
+الطرفين أو انخفاض ثقة التصنيف أو وجود مؤشرات جنائية في دعوى مصنَّفة مدنياً) — ولا
+يُختلق أي حقل غائب.
+
+### تصنيف دعوى من نصها فقط
+
+```bash
+curl -X POST http://localhost:8000/api/v1/cases/classify \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"text":"قام المتهم بسرقة المسروقات بالإكراه، وأحالت النيابة العامة القضية للمحكمة الجزائية."}'
+```
+
+### تفصيل دعوى من نصها فقط
+
+```bash
+curl -X POST http://localhost:8000/api/v1/cases/extract \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"text":"المحكمة الابتدائية\nالقضية رقم 77/2026\nالوقائع: …\nالمدعي: …\nالمدعى عليه: …\nالطلبات\n1. …\nالدفوع\n- …"}'
+```
+
+### واجهة الاستلام التفاعلية
+
+واجهة جاهزة لرفع الأوراق ومراجعة التفصيل والتصنيف والمسودة:
+
+```
+http://localhost:8000/ui/intake.html
+```
+
 ## 5. نقاط النهاية
 
 | الطريقة | المسار | الوصف |
@@ -329,6 +451,10 @@ curl http://localhost:8000/api/v1/ingestion/stats | python -m json.tool
 | GET | `/api/v1/ingestion/stats` | إحصاءات المدونة |
 | POST | `/api/v1/retrieval/search` | بحث هجين في المواد |
 | GET | `/api/v1/retrieval/search?q=...` | بحث سريع |
+| **POST** | **`/api/v1/cases/intake`** | **استلام قضية من ملفات مرفوعة: استخراج + تفصيل + تصنيف + مسودة حكم** |
+| POST | `/api/v1/cases/classify` | تصنيف دعوى من نصها (مدني/جنائي/تجاري/…) |
+| POST | `/api/v1/cases/extract` | تفصيل دعوى من نصها (الأطراف والطلبات والدفوع) |
+| GET | `/api/v1/cases/lexicon` | دليل أنواع الدعاوى والقوانين الواجبة التطبيق |
 | **POST** | **`/api/v1/cases/submit`** | **المسار الكامل: دعوى + أدلة → مسودة حكم** |
 | GET | `/api/v1/cases` | قائمة القضايا |
 | GET | `/api/v1/cases/{id}` | تفاصيل قضية |
@@ -414,13 +540,17 @@ LEGAL_AI_N8N_SECRET=<نفس N8N_HMAC_SECRET>
 
 ```bash
 pip install -r requirements-dev.txt
-pytest -q            # 58 اختباراً، بلا شبكة وبلا قاعدة بيانات
+pytest -q            # 111 اختباراً، بلا شبكة وبلا قاعدة بيانات
 ruff check app scripts tests
 ```
 
 تغطي الاختبارات: تطبيع النص العربي، التقطيع واعياً بالمواد، مدقّق الاستشهاد
 (رفض المواد المُختلقة والاقتباسات المفبركة)، الاسترجاع الهجين وتثبيت المواد
 المُستشهد بها، تقييم الأدلة وفق مراتب الإثبات، والمسار الكامل حتى Markdown.
+كما تغطي **استلام القضية**: تفصيل الدعوى (استخراج الأطراف والطلبات والدفوع وقيمة
+الدعوى وعملتها دون اختلاق)، وتصنيف الدعوى إلى الفروع اليمنية الثمانية، وعدم
+التقاط المصطلحات داخل كلمات أخرى (مثل «سب» داخل «مناسباً»)، وعدم إغفال المؤشرات
+الجنائية، ومسار الاستلام من نص أو من ملف مرفوع حتى المسودة.
 كما تغطي طبقة المصادقة والصلاحيات: تجزئة كلمات المرور (PBKDF2)، توقيع الرموز
 والتحقق من العبث بها وانتهائها، مصفوفة الأدوار والصلاحيات، إنشاء حساب المالك،
 منع إنشاء مالك ثانٍ أو تعديله أو حذفه، وعزل صلاحيات كل دور على واجهات الإدارة.
@@ -437,15 +567,18 @@ ruff check app scripts tests
 │   │   ├── deps.py                 # ربط التبعيات
 │   │   └── v1/
 │   │       ├── router.py
-│   │       └── routes/             # health, ingestion, retrieval, cases, auth, admin
+│   │       └── routes/             # health, ingestion, retrieval, cases, intake, auth, admin
 │   ├── core/                       # config, logging, errors, text_utils, chunking,
-│   │                               #   security (تجزئة/رموز), permissions (RBAC)
+│   │                               #   security (تجزئة/رموز), permissions (RBAC),
+│   │                               #   legal_lexicon (معجم أنواع الدعاوى والمؤشرات)
 │   ├── db/                         # pool, vector_store, repositories, user_repository
 │   ├── llm/                        # embeddings, provider, prompts, chains, validator
-│   ├── schemas/                    # common, legal, case, judgment, auth
+│   ├── schemas/                    # common, legal, case, intake, judgment, auth
 │   ├── services/                   # ingestion, retrieval, evidence, judgment, pipeline,
+│   │                               #   intake (الاستلام والتفصيل), case_details (تفصيل الدعوى),
+│   │                               #   classification (تصنيف الدعوى), document_extraction (OCR),
 │   │                               #   n8n, auth (المالك), admin (إدارة المنصة)
-│   ├── static/                     # index.html (واجهة المنصة), admin.html (لوحة التحكم)
+│   ├── static/                     # index.html, admin.html, intake.html (واجهة الاستلام)
 │   └── data/samples/               # مدونة يمنية تجريبية
 ├── sql/
 │   ├── 001_init_pgvector.sql       # الجداول والفهارس (HNSW, GIN, trigram)
@@ -455,7 +588,7 @@ ruff check app scripts tests
 │   ├── seed_corpus.py              # إدخال المدونة القانونية
 │   └── apply_sql.py                # تنفيذ مخطط SQL
 ├── n8n/legal_case_workflow.json    # سير عمل جاهز
-├── tests/                          # 58 اختباراً
+├── tests/                          # 111 اختباراً (منها اختبارات التفصيل والتصنيف والاستلام)
 ├── Dockerfile · docker-compose.yml · Makefile · requirements.txt
 └── .env.example
 ```

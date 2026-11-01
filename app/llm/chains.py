@@ -19,6 +19,7 @@ from pydantic import BaseModel, ValidationError
 
 from app.core.logging import get_logger
 from app.llm.prompts import (
+    CLASSIFICATION_PROMPT,
     EVIDENCE_SYSTEM_PROMPT,
     JUDGMENT_SYSTEM_PROMPT,
     QUERY_EXPANSION_PROMPT,
@@ -114,6 +115,15 @@ def build_query_expansion_chain(provider: LLMProvider | None = None) -> LegalCha
     return LegalChain(
         name="query_expansion",
         system_prompt=QUERY_EXPANSION_PROMPT,
+        provider=provider,
+        max_tokens=512,
+    )
+
+
+def build_classification_chain(provider: LLMProvider | None = None) -> LegalChain:
+    return LegalChain(
+        name="case_classification",
+        system_prompt=CLASSIFICATION_PROMPT,
         provider=provider,
         max_tokens=512,
     )

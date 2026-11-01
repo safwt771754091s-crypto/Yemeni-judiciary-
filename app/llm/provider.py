@@ -135,6 +135,8 @@ class MockLLMProvider:
             return _mock_judgment(prompt, articles)
         if task == "legal_reasoning":
             return _mock_reasoning(prompt, articles)
+        if task == "case_classification":
+            return _mock_classification(prompt)
         return {"answer": "لا يمكن إصدار إجابة دون نصوص قانونية مسترجعة."}
 
 
@@ -143,6 +145,7 @@ MOCK_TASK_MARKERS: list[tuple[str, str]] = [
     ("evidence_analysis", "تقييم الأدلة"),
     ("legal_reasoning", "منهجية التحليل الإلزامية"),
     ("query_expansion", "استعلامات البحث"),
+    ("case_classification", "تصنيف الدعاوى أمام المحاكم اليمنية"),
 ]
 
 
@@ -293,6 +296,23 @@ def _mock_reasoning(prompt: str, articles: list[dict[str, Any]]) -> dict[str, An
             "لم تُقدَّم دفوع شكلية مانعة من نظر الدعوى بحسب ما ورد في الملف."
         ],
         "precedents": [],
+    }
+
+
+def _mock_classification(prompt: str) -> dict[str, Any]:
+    """Echo the deterministic classifier's leading candidate.
+
+    The offline provider must never *decide* a case type on its own - the
+    lexicon is the authority. It simply returns the highest-scoring candidate
+    the caller already computed, which makes the LLM path exercisable offline
+    while keeping the deterministic model in charge.
+    """
+    initial = _first_match(prompt, r"التصنيف المبدئي[:：]?\s*([^\n]+)")
+    candidates = re.findall(r"-\s*([\u0621-\u064A]+)\s*\(درجة", prompt)
+    chosen = (initial or (candidates[0] if candidates else "مدني")).strip()
+    return {
+        "case_type": chosen,
+        "reason": "أُبقي التصنيف المبدئي المحسوب من مؤشرات النص (مزوّد محلي دون شبكة).",
     }
 
 

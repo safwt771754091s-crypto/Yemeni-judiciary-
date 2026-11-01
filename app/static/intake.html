@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>استلام القضية وتفصيلها — منصة الذكاء الاصطناعي القانوني</title>
+<style>
+  :root{
+    --bg:#0f1720; --panel:#17212b; --panel2:#1e2a36; --line:#2c3a49;
+    --ink:#e8eef5; --muted:#93a4b6; --gold:#c8a24a; --gold2:#e0be6a;
+    --ok:#7fd8a3; --warn:#e5c877; --bad:#e58b8b;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:"Segoe UI","Noto Naskh Arabic",Tahoma,sans-serif;line-height:1.75}
+  header{background:linear-gradient(135deg,#132030,#1b2b3c);
+    border-bottom:2px solid var(--gold);padding:20px 28px}
+  header h1{margin:0;font-size:22px;color:var(--gold2)}
+  header p{margin:6px 0 0;color:var(--muted);font-size:14px}
+  .badge{display:inline-block;background:#243546;border:1px solid var(--line);
+    color:var(--muted);border-radius:20px;padding:2px 12px;font-size:12px;margin-inline-start:8px}
+  .wrap{max-width:1240px;margin:0 auto;padding:22px}
+  .links a{color:var(--gold2);margin-inline-end:16px;font-size:13px;text-decoration:none}
+  .links a:hover{text-decoration:underline}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+    padding:18px;margin-bottom:18px}
+  .card h2{margin:0 0 14px;font-size:17px;color:var(--gold2);
+    border-bottom:1px solid var(--line);padding-bottom:9px;display:flex;
+    align-items:center;gap:9px}
+  .step{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;
+    border-radius:50%;background:var(--gold);color:#12181f;font-size:13px;font-weight:800}
+  label{display:block;font-size:13px;color:var(--muted);margin:10px 0 4px}
+  input,textarea,select{width:100%;background:var(--panel2);border:1px solid var(--line);
+    color:var(--ink);border-radius:8px;padding:9px 11px;font-family:inherit;font-size:14px}
+  input:focus,textarea:focus,select:focus{outline:none;border-color:var(--gold)}
+  textarea{min-height:90px;resize:vertical}
+  button{background:linear-gradient(135deg,var(--gold),#a8823a);color:#12181f;border:0;
+    border-radius:9px;padding:12px 26px;font-size:15px;font-weight:700;cursor:pointer;
+    font-family:inherit}
+  button:hover{filter:brightness(1.1)}
+  button:disabled{opacity:.55;cursor:wait}
+  button.ghost{background:transparent;border:1px solid var(--line);color:var(--muted);
+    padding:8px 16px;font-size:13px;font-weight:500}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+  @media(max-width:900px){.row,.row3{grid-template-columns:1fr}}
+  /* drop zone */
+  .drop{border:2px dashed var(--line);border-radius:12px;padding:34px 20px;text-align:center;
+    background:var(--panel2);cursor:pointer;transition:.15s}
+  .drop:hover,.drop.over{border-color:var(--gold);background:#22303d}
+  .drop .big{font-size:34px;margin-bottom:6px}
+  .drop b{color:var(--gold2)}
+  .files{margin-top:14px}
+  .file{display:flex;align-items:center;gap:10px;background:var(--panel2);
+    border:1px solid var(--line);border-radius:9px;padding:9px 12px;margin-bottom:7px;font-size:13px}
+  .file .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .file .rm{background:transparent;border:1px solid var(--line);color:var(--bad);
+    border-radius:6px;padding:2px 9px;font-size:12px;cursor:pointer}
+  /* status pills */
+  .pill{display:inline-block;border-radius:20px;padding:3px 12px;font-size:12px;font-weight:600;
+    border:1px solid var(--line);background:#243546;color:var(--muted)}
+  .pill.ok{background:#1c3a28;color:var(--ok);border-color:#2f6b47}
+  .pill.warn{background:#3a3218;color:var(--warn);border-color:#6b5a26}
+  .pill.bad{background:#3a1f1f;color:var(--bad);border-color:#6b2f2f}
+  .pill.gold{background:#3a2f14;color:var(--gold2);border-color:#6b5326}
+  /* metrics */
+  .metrics{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:14px}
+  .metric{background:var(--panel2);border:1px solid var(--line);border-radius:10px;
+    padding:10px 16px;min-width:120px}
+  .metric .k{font-size:12px;color:var(--muted)}
+  .metric .v{font-size:19px;font-weight:800;color:var(--gold2)}
+  /* score bars */
+  .bar{height:9px;background:var(--panel2);border-radius:6px;overflow:hidden;
+    border:1px solid var(--line)}
+  .bar span{display:block;height:100%;background:linear-gradient(90deg,var(--gold),var(--gold2))}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin-top:8px}
+  th,td{text-align:right;padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--gold2);font-weight:600;background:var(--panel2)}
+  .q{display:inline-block;border-radius:5px;padding:1px 8px;font-size:11px;font-weight:700}
+  .q-high{background:#1c3a28;color:#7fd8a3;border:1px solid #2f6b47}
+  .q-medium{background:#3a3218;color:#e5c877;border:1px solid #6b5a26}
+  .q-low{background:#3a1f1f;color:#e58b8b;border:1px solid #6b2f2f}
+  .md{background:#111a22;border:1px solid var(--line);border-radius:9px;
+    padding:22px;max-height:640px;overflow:auto;font-size:14.5px}
+  .md h1{font-size:20px;color:var(--gold2);border-bottom:1px solid var(--line);padding-bottom:8px}
+  .md h2{font-size:17px;color:var(--gold2);margin-top:22px}
+  .md h3{font-size:15px;color:var(--gold2)}
+  .md blockquote{background:#2a2010;border-inline-start:3px solid var(--gold);
+    margin:12px 0;padding:10px 14px;border-radius:6px;color:#e8d9ae;font-size:13px}
+  .md hr{border:0;border-top:1px solid var(--line);margin:18px 0}
+  .md table{font-size:13px}
+  .md code{background:var(--panel2);padding:1px 6px;border-radius:4px}
+  .warnbox{background:#3a2b16;border:1px solid #6b5326;color:#f0d59a;
+    border-radius:9px;padding:11px 14px;font-size:13px;margin-bottom:14px}
+  .infobox{background:#152a33;border:1px solid #27515f;color:#a9d6e2;
+    border-radius:9px;padding:11px 14px;font-size:13px;margin-bottom:14px}
+  .crimbox{background:#3a1f1f;border:1px solid #6b2f2f;color:#f0b0b0;
+    border-radius:9px;padding:11px 14px;font-size:13px;margin-bottom:14px}
+  .muted{color:var(--muted);font-size:13px}
+  .spinner{display:none;color:var(--gold2);font-size:14px;margin-top:12px;text-align:center}
+  .spinner.on{display:block}
+  .spin{display:inline-block;width:16px;height:16px;border:2px solid var(--line);
+    border-top-color:var(--gold);border-radius:50%;animation:sp .8s linear infinite;
+    vertical-align:-3px;margin-inline-end:8px}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  .hide{display:none}
+  .kvs{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:13.5px}
+  .kvs .k{color:var(--muted)}
+  .kvs .v{font-weight:600}
+  .missing{color:var(--warn)}
+  .tabs{display:flex;gap:6px;border-bottom:1px solid var(--line);margin-bottom:14px;flex-wrap:wrap}
+  .tabs button{background:transparent;border:0;border-bottom:2px solid transparent;
+    color:var(--muted);padding:9px 15px;font-size:14px;font-weight:600;cursor:pointer;border-radius:0}
+  .tabs button.on{color:var(--gold2);border-bottom-color:var(--gold)}
+  .tabs button:hover{color:var(--ink)}
+  .login{max-width:420px;margin:60px auto}
+  .tag{display:inline-block;background:#243546;border:1px solid var(--line);border-radius:6px;
+    padding:1px 8px;font-size:11.5px;margin:2px;color:var(--muted)}
+  .tag.hit{background:#3a2f14;border-color:#6b5326;color:var(--gold2)}
+  footer{text-align:center;color:var(--muted);font-size:12.5px;padding:26px}
+</style>
+</head>
+<body>
+<header>
+  <h1>استلام القضية وتفصيلها آلياً <span class="badge">الجمهورية اليمنية</span></h1>
+  <p>ارفع أوراق القضية — يقوم النظام بالاستخراج والتعرّف الضوئي وتفصيل الدعوى وتصنيفها وإصدار مسودة الحكم</p>
+  <div class="links" style="margin-top:10px">
+    <a href="/">واجهة المنصة</a>
+    <a href="/ui/admin.html">لوحة التحكم</a>
+    <a href="/docs" target="_blank">وثائق الـ API</a>
+    <a href="/api/v1/health/ready" target="_blank">جاهزية النظام</a>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <!-- ================= LOGIN ================= -->
+  <div id="loginCard" class="card login">
+    <h2>الدخول إلى المنصة</h2>
+    <label>اسم المستخدم</label>
+    <input id="u" autocomplete="username" placeholder="owner">
+    <label>كلمة المرور</label>
+    <input id="p" type="password" autocomplete="current-password" placeholder="••••••••">
+    <div style="margin-top:16px"><button id="loginBtn">دخول</button></div>
+    <div id="loginMsg" class="warnbox hide" style="margin-top:14px"></div>
+    <p class="muted" style="margin-top:14px">يلزم تسجيل الدخول لاستخدام محرك الاستدلال القانوني.</p>
+  </div>
+
+  <!-- ================= INTAKE ================= -->
+  <div id="app" class="hide">
+
+    <div class="card">
+      <h2><span class="step">1</span> رفع أوراق القضية</h2>
+      <div id="ocrWarn" class="warnbox hide"></div>
+      <div class="drop" id="drop">
+        <div class="big">📄</div>
+        <b>اسحب الملفات هنا</b> أو اضغط للاختيار
+        <div class="muted" style="margin-top:6px">
+          PDF · صور ممسوحة (OCR عربي) · Word · نص — حتى 10 ملفات، 25 م.ب للملف
+        </div>
+      </div>
+      <input type="file" id="fileInput" multiple class="hide"
+             accept=".pdf,.png,.jpg,.jpeg,.tif,.tiff,.bmp,.webp,.docx,.txt,.md,.rtf,.csv,.json">
+      <div class="files" id="fileList"></div>
+      <label>أو الصق نص القضية مباشرة (اختياري)</label>
+      <textarea id="text" placeholder="يمكنك لصق نص الدعوى هنا بدلاً من رفع ملفات، أو إضافة تفاصيل ناقصة…"></textarea>
+      <div class="row3" style="margin-top:6px">
+        <div>
+          <label>النوع المصرَّح به (اختياري — يُعالج كقرينة)</label>
+          <select id="declared">
+            <option value="">— تصنيف آلي —</option>
+            <option>مدني</option><option>تجاري</option><option>جنائي</option>
+            <option>أسري</option><option>عمالي</option><option>إداري</option>
+            <option>عقاري</option><option>تنفيذ</option>
+          </select>
+        </div>
+        <div>
+          <label>رقم القضية (اختياري)</label>
+          <input id="caseNumber" placeholder="مثال: 1451/2026">
+        </div>
+        <div>
+          <label>المحكمة (اختياري)</label>
+          <input id="courtName" placeholder="المحكمة الابتدائية">
+        </div>
+      </div>
+      <div style="margin-top:16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <button id="go">تفصيل القضية وإصدار مسودة الحكم</button>
+        <button id="goNoJudge" class="ghost">تفصيل وتصنيف فقط (دون مسودة)</button>
+        <button id="logout" class="ghost">خروج</button>
+      </div>
+      <div class="spinner" id="spin"><span class="spin"></span>جارٍ استخراج النص وتحليل القضية… قد يستغرق هذا دقائق للملفات الممسوحة ضوئياً.</div>
+      <div id="err" class="warnbox hide" style="margin-top:14px"></div>
+    </div>
+
+    <!-- ================= RESULTS ================= -->
+    <div id="results" class="hide">
+
+      <div class="card">
+        <h2>الخلاصة</h2>
+        <div class="metrics" id="metrics"></div>
+        <div id="reviewBox" class="warnbox hide"></div>
+        <div id="crimBox" class="crimbox hide"></div>
+        <div id="warnBox" class="warnbox hide"></div>
+      </div>
+
+      <div class="tabs">
+        <button class="on" data-tab="tab-class">التصنيف والتفصيل</button>
+        <button data-tab="tab-files">المستندات والأدلة</button>
+        <button data-tab="tab-law">المواد المسترجعة</button>
+        <button data-tab="tab-judg">مسودة الحكم</button>
+      </div>
+
+      <div id="tab-class" class="tabpane">
+        <div class="card">
+          <h2>تصنيف الدعوى</h2>
+          <div id="classInfo"></div>
+          <div id="classScores"></div>
+        </div>
+        <div class="card">
+          <h2>تفصيل الدعوى (الحقول المستخرجة)</h2>
+          <div class="kvs" id="details"></div>
+          <h3 style="color:var(--gold2);font-size:15px;margin-top:20px">طلبات المدعي</h3>
+          <div id="claims"></div>
+          <h3 style="color:var(--gold2);font-size:15px;margin-top:16px">ردود المدعى عليه</h3>
+          <div id="defences"></div>
+        </div>
+      </div>
+
+      <div id="tab-files" class="tabpane hide">
+        <div class="card">
+          <h2>المستندات المستخرجة</h2>
+          <div id="docs"></div>
+        </div>
+        <div class="card">
+          <h2>الأدلة المسجّلة</h2>
+          <div id="evid"></div>
+        </div>
+      </div>
+
+      <div id="tab-law" class="tabpane hide">
+        <div class="card">
+          <h2>المواد القانونية اليمنية المسترجعة</h2>
+          <p class="muted">هذه هي النصوص الوحيدة المسموح الاستشهاد بها في المسودة. كل استشهاد في المسودة يُطابَق حرفياً مع نصها.</p>
+          <div id="arts"></div>
+        </div>
+      </div>
+
+      <div id="tab-judg" class="tabpane hide">
+        <div class="card">
+          <h2>مسودة الحكم القضائي</h2>
+          <div id="judgMeta"></div>
+          <div class="md" id="md"></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <footer>المخرجات مسودات آلية لا تُعدّ أحكاماً قضائية إلا بعد اعتماد القاضي المختص.</footer>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let TOKEN = localStorage.getItem("lai_token") || "";
+let FILES = [];
+
+/* ---------- auth ---------- */
+async function login(){
+  const u = $("u").value.trim(), p = $("p").value;
+  $("loginMsg").classList.add("hide");
+  if(!u || !p){ show($("loginMsg"), "أدخل اسم المستخدم وكلمة المرور"); return; }
+  $("loginBtn").disabled = true;
+  try{
+    const r = await fetch("/api/v1/auth/login", {method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({username:u, password:p})});
+    const d = await r.json();
+    if(!r.ok) throw new Error(d?.error?.message || "فشل الدخول");
+    TOKEN = d.access_token;
+    localStorage.setItem("lai_token", TOKEN);
+    enterApp();
+  }catch(e){ show($("loginMsg"), e.message); }
+  finally{ $("loginBtn").disabled = false; }
+}
+function show(el, msg){ el.textContent = msg; el.classList.remove("hide"); }
+function logout(){ TOKEN=""; localStorage.removeItem("lai_token"); $("app").classList.add("hide"); $("loginCard").classList.remove("hide"); }
+
+function enterApp(){
+  $("loginCard").classList.add("hide");
+  $("app").classList.remove("hide");
+  loadOcr();
+}
+async function loadOcr(){
+  try{
+    const r = await fetch("/api/v1/cases/lexicon", {headers: auth()});
+    const d = await r.json();
+    const ocr = d.ocr || {};
+    if(!ocr.available){
+      show($("ocrWarn"), "تنبيه: محرّك التعرّف الضوئي (OCR) غير متاح على الخادم — لن تُقرأ الملفات الممسوحة ضوئياً. يمكنك لصق نص القضية في الحقل النصي.");
+    } else if((ocr.missing_languages||[]).length){
+      show($("ocrWarn"), "تنبيه: نماذج OCR العربية غير مثبّتة: " + ocr.missing_languages.join("، "));
+    }
+  }catch(e){}
+}
+function auth(){ return {"Authorization": "Bearer " + TOKEN}; }
+
+/* ---------- files ---------- */
+const drop = $("drop"), fileInput = $("fileInput");
+drop.onclick = () => fileInput.click();
+drop.ondragover = (e) => { e.preventDefault(); drop.classList.add("over"); };
+drop.ondragleave = () => drop.classList.remove("over");
+drop.ondrop = (e) => { e.preventDefault(); drop.classList.remove("over"); addFiles(e.dataTransfer.files); };
+fileInput.onchange = () => { addFiles(fileInput.files); fileInput.value=""; };
+function addFiles(list){
+  for(const f of list){ if(FILES.length>=10) break; FILES.push(f); }
+  renderFiles();
+}
+function renderFiles(){
+  $("fileList").innerHTML = FILES.map((f,i)=>`
+    <div class="file"><span>📎</span>
+      <span class="nm">${esc(f.name)}</span>
+      <span class="muted">${(f.size/1048576).toFixed(2)} م.ب</span>
+      <button class="rm" onclick="rmFile(${i})">حذف</button>
+    </div>`).join("");
+}
+function rmFile(i){ FILES.splice(i,1); renderFiles(); }
+function esc(s){ return String(s??"").replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
+/* ---------- tabs ---------- */
+document.querySelectorAll(".tabs button").forEach(b=>{
+  b.onclick = () => {
+    document.querySelectorAll(".tabs button").forEach(x=>x.classList.remove("on"));
+    document.querySelectorAll(".tabpane").forEach(x=>x.classList.add("hide"));
+    b.classList.add("on");
+    $(b.dataset.tab).classList.remove("hide");
+  };
+});
+
+/* ---------- submit ---------- */
+$("go").onclick = () => run(true);
+$("goNoJudge").onclick = () => run(false);
+
+async function run(withJudgment){
+  $("err").classList.add("hide");
+  $("results").classList.add("hide");
+  if(!FILES.length && !$("text").value.trim()){
+    show($("err"), "ارفع ملفاً واحداً على الأقل أو الصق نص القضية."); return;
+  }
+  const fd = new FormData();
+  FILES.forEach(f => fd.append("files", f));
+  const t = $("text").value.trim(); if(t) fd.append("text", t);
+  if($("declared").value) fd.append("declared_case_type", $("declared").value);
+  if($("caseNumber").value.trim()) fd.append("case_number", $("caseNumber").value.trim());
+  if($("courtName").value.trim()) fd.append("court_name", $("courtName").value.trim());
+  fd.append("generate_judgment", withJudgment ? "true" : "false");
+
+  $("spin").classList.add("on");
+  $("go").disabled = $("goNoJudge").disabled = true;
+  try{
+    const r = await fetch("/api/v1/cases/intake", {method:"POST", headers: auth(), body: fd});
+    const d = await r.json();
+    if(!r.ok) throw new Error(d?.error?.message || ("خطأ " + r.status));
+    render(d);
+    $("results").classList.remove("hide");
+    document.querySelector('.tabs button[data-tab="tab-class"]').click();
+    $("results").scrollIntoView({behavior:"smooth"});
+  }catch(e){ show($("err"), e.message); }
+  finally{ $("spinner").classList.remove("on"); $("spin").classList.remove("on"); $("go").disabled = $("goNoJudge").disabled = false; }
+}
+
+/* ---------- render ---------- */
+function render(d){
+  const c = d.classification, det = d.details;
+  const statusMap = {"judgment_ready":["ok","مسودة الحكم جاهزة"],"structured":["gold","تم التفصيل والتصنيف"],
+                     "needs_review":["warn","يحتاج مراجعة بشرية"],"extracted":["gold","تم الاستخراج"]};
+  const [cls, lbl] = statusMap[d.status] || ["gold", d.status];
+
+  $("metrics").innerHTML = `
+    <div class="metric"><div class="k">الحالة</div><div class="v"><span class="pill ${cls}">${esc(lbl)}</span></div></div>
+    <div class="metric"><div class="k">نوع الدعوى</div><div class="v">${esc(c.label_ar)}</div></div>
+    <div class="metric"><div class="k">ثقة التصنيف</div><div class="v">${(c.confidence*100).toFixed(0)}%</div></div>
+    <div class="metric"><div class="k">المستندات</div><div class="v">${d.documents.length}</div></div>
+    ${d.pipeline ? `<div class="metric"><div class="k">المواد المسترجعة</div><div class="v">${d.pipeline.retrieved_articles.length}</div></div>
+    <div class="metric"><div class="k">درجة الإسناد</div><div class="v">${((d.pipeline.grounding_score||0)*100).toFixed(0)}%</div></div>`:""}
+    <div class="metric"><div class="k">زمن المعالجة</div><div class="v">${(d.processing_ms/1000).toFixed(1)}ث</div></div>`;
+
+  // criminal banner — never suppress
+  if(c.criminal_flag && c.case_type !== "جنائي"){
+    $("crimBox").innerHTML = "⚠️ <b>مؤشرات جنائية:</b> ظهرت في نص القضية مؤشرات على جريمة. يجب عرض الملف على النيابة العامة أو إحالته إلى الدائرة الجزائية قبل الفصل مدنياً.";
+    $("crimBox").classList.remove("hide");
+  } else { $("crimBox").classList.add("hide"); }
+
+  // needs review
+  const nr = d.needs_human_review || [];
+  if(nr.length){
+    $("reviewBox").innerHTML = "🔎 <b>يلزم تأكيد الحقول التالية بشرياً قبل الاعتماد:</b><ul style='margin:8px 0 0'>" +
+      nr.map(x=>`<li>${esc(x)}</li>`).join("") + "</ul>";
+    $("reviewBox").classList.remove("hide");
+  } else { $("reviewBox").classList.add("hide"); }
+
+  // warnings
+  const ws = d.warnings || [];
+  if(ws.length){
+    $("warnBox").innerHTML = "ℹ️ <b>ملاحظات المعالجة:</b><ul style='margin:8px 0 0'>" +
+      ws.map(x=>`<li>${esc(x)}</li>`).join("") + "</ul>";
+    $("warnBox").classList.remove("hide");
+  } else { $("warnBox").classList.add("hide"); }
+
+  // classification detail
+  $("classInfo").innerHTML = `
+    <div class="kvs">
+      <div class="k">النوع</div><div class="v">${esc(c.label_ar)} <span class="pill ${c.criminal_flag?'bad':'ok'}">${c.criminal_flag?'دعوى جزائية':'دعوى غير جزائية'}</span></div>
+      <div class="k">طريقة التصنيف</div><div class="v">${esc(c.method)}</div>
+      <div class="k">القوانين الواجبة التطبيق</div><div class="v">${c.source_types.map(x=>`<span class="tag hit">${esc(x)}</span>`).join(" ")}</div>
+      <div class="k">درجة الثقة</div><div class="v">${(c.confidence*100).toFixed(1)}%</div>
+    </div>`;
+  const scores = (c.scores||[]).filter(s=>s.score>0).slice(0,5);
+  if(scores.length){
+    const max = Math.max(...scores.map(s=>s.score));
+    $("classScores").innerHTML = `<h3 style="color:var(--gold2);font-size:15px;margin-top:18px">أوزان المرشحين</h3>` +
+      scores.map(s=>`
+        <div style="margin:8px 0">
+          <div style="display:flex;justify-content:space-between;font-size:13px">
+            <span>${esc(s.label_ar)}</span><span class="muted">${s.score.toFixed(1)}</span></div>
+          <div class="bar"><span style="width:${(s.score/max*100).toFixed(0)}%"></span></div>
+          <div style="margin-top:4px">${(s.matched||[]).slice(0,7).map(m=>`<span class="tag hit">${esc(m)}</span>`).join("")}</div>
+        </div>`).join("");
+  } else $("classScores").innerHTML = "";
+  if((c.notes||[]).length)
+    $("classScores").innerHTML += `<div class="infobox" style="margin-top:14px">${c.notes.map(esc).join("<br>")}</div>`;
+
+  // details
+  const rows = [
+    ["المحكمة","court_name"],["الدائرة","circuit"],["رقم القضية","case_number"],
+    ["تاريخ الجلسة","hearing_date"],["القاضي","judge_name"],["موضوع الدعوى","subject_matter"],
+    ["قيمة الدعوى","claim_value"],["المدعي","plaintiff_name"],["وكيل المدعي","plaintiff_representative"],
+    ["المدعى عليه","defendant_name"],["وكيل المدعى عليه","defendant_representative"],
+    ["المواد المذكورة","legal_basis"]
+  ];
+  $("details").innerHTML = rows.map(([k,f])=>{
+    let v = det[f];
+    if(Array.isArray(v)) v = v.map(x=>`<span class="tag hit">${esc(x)}</span>`).join(" ") || "—";
+    else if(v===null || v===undefined || v==="") v = `<span class="missing">— غير مستخرج —</span>`;
+    else v = esc(v);
+    return `<div class="k">${k}</div><div class="v">${v}</div>`;
+  }).join("") + `<div class="k">درجة اكتمال التفصيل</div><div class="v">${(det.confidence*100).toFixed(0)}%</div>`;
+
+  $("claims").innerHTML = (det.claims||[]).length
+    ? "<ol style='margin:6px 20px 0 0;padding:0'>"+det.claims.map(x=>`<li style="margin-bottom:5px">${esc(x)}</li>`).join("")+"</ol>"
+    : "<p class='muted'>لم تُستخرج طلبات صريحة.</p>";
+  $("defences").innerHTML = (det.defences||[]).length
+    ? "<ul style='margin:6px 20px 0 0;padding:0'>"+det.defences.map(x=>`<li style="margin-bottom:5px">${esc(x)}</li>`).join("")+"</ul>"
+    : "<p class='muted'>لم تُستخرج ردود أو دفوع.</p>";
+
+  // documents
+  $("docs").innerHTML = d.documents.map(x=>`
+    <div class="file" style="display:block">
+      <div style="display:flex;gap:10px;align-items:center">
+        <b style="flex:1">${esc(x.filename)}</b>
+        <span class="pill ${x.used_ocr?'warn':'ok'}">${x.used_ocr?'OCR':'نص أصلي'}</span>
+        <span class="pill ${x.text_quality==='high'?'ok':(x.text_quality==='medium'?'warn':'bad')}">جودة ${esc(x.text_quality)}</span>
+      </div>
+      <div class="muted" style="margin-top:5px">${x.page_count} صفحة · ${x.char_count} حرف · ${esc(x.evidence_type)}${x.error?` · <span style="color:var(--bad)">${esc(x.error)}</span>`:""}</div>
+      ${x.text_preview?`<div class="muted" style="margin-top:6px;max-height:90px;overflow:auto;white-space:pre-wrap;background:var(--bg);padding:8px;border-radius:6px">${esc(x.text_preview)}</div>`:""}
+    </div>`).join("") || "<p class='muted'>لا مستندات.</p>";
+
+  // evidence
+  $("evid").innerHTML = (d.evidence||[]).length
+    ? `<table><thead><tr><th>الدليل</th><th>النوع</th><th>مقدَّم من</th></tr></thead><tbody>` +
+      d.evidence.map(e=>`<tr><td>${esc(e.title)}</td><td>${esc(e.evidence_type)}</td><td>${esc(e.submitted_by)}</td></tr>`).join("") +
+      `</tbody></table>`
+    : "<p class='muted'>لا أدلة مسجّلة.</p>";
+
+  // retrieved articles
+  const arts = d.pipeline?.retrieved_articles || [];
+  $("arts").innerHTML = arts.length
+    ? `<table><thead><tr><th>المادة</th><th>القانون</th><th>النص</th><th>الملاءمة</th></tr></thead><tbody>` +
+      arts.map(a=>`<tr>
+        <td><b>${esc(a.article_label)}</b></td>
+        <td>${esc(a.law_title)}${a.law_number?` (${esc(a.law_number)})`:""}</td>
+        <td style="max-width:520px">${esc((a.content||"").slice(0,320))}${(a.content||"").length>320?"…":""}</td>
+        <td><span class="pill ${a.verbatim?'ok':'warn'}">${(a.similarity??0).toFixed(2)}</span></td>
+      </tr>`).join("") + `</tbody></table>`
+    : "<p class='muted'>لم تُسترجَع مواد (لم تُطلب مسودة الحكم أو لم تُطابق مواد).</p>";
+
+  // judgment
+  if(d.pipeline?.judgment_markdown){
+    const p = d.pipeline;
+    $("judgMeta").innerHTML = `<div class="metrics">
+      <div class="metric"><div class="k">درجة الإسناد</div><div class="v">${((p.grounding_score||0)*100).toFixed(0)}%</div></div>
+      <div class="metric"><div class="k">النموذج</div><div class="v" style="font-size:14px">${esc(p.model||"—")}</div></div>
+      <div class="metric"><div class="k">الاستشهادات</div><div class="v">${(p.retrieved_articles||[]).length}</div></div>
+      </div>
+      <div class="infobox">مسودة آلية — لا تُعدّ حكماً قضائياً إلا بعد مراجعة واعتماد القاضي المختص. جميع الاستشهادات مطابَقة حرفياً مع النصوص المسترجعة.</div>`;
+    $("md").innerHTML = mdToHtml(p.judgment_markdown);
+  } else {
+    $("judgMeta").innerHTML = "<p class='muted'>لم تُطلب مسودة الحكم.</p>";
+    $("md").innerHTML = "";
+  }
+}
+
+/* minimal markdown renderer for the judgment */
+function mdToHtml(md){
+  const lines = md.split("\n"); let out = [], inList=false;
+  const inline = (s)=> esc(s)
+    .replace(/\*\*(.+?)\*\*/g,"<b>$1</b>")
+    .replace(/\*(.+?)\*/g,"<i>$1</i>")
+    .replace(/`(.+?)`/g,"<code>$1</code>");
+  for(let ln of lines){
+    if(/^###\s/.test(ln)){ if(inList){out.push("</ul>");inList=false;} out.push(`<h3>${inline(ln.slice(4))}</h3>`); }
+    else if(/^##\s/.test(ln)){ if(inList){out.push("</ul>");inList=false;} out.push(`<h2>${inline(ln.slice(3))}</h2>`); }
+    else if(/^#\s/.test(ln)){ if(inList){out.push("</ul>");inList=false;} out.push(`<h1>${inline(ln.slice(2))}</h1>`); }
+    else if(/^>\s?/.test(ln)){ if(inList){out.push("</ul>");inList=false;} out.push(`<blockquote>${inline(ln.replace(/^>\s?/,""))}</blockquote>`); }
+    else if(/^---+$/.test(ln.trim())){ if(inList){out.push("</ul>");inList=false;} out.push("<hr>"); }
+    else if(/^\s*[-*]\s+/.test(ln)){ if(!inList){out.push("<ul>");inList=true;} out.push(`<li>${inline(ln.replace(/^\s*[-*]\s+/,""))}</li>`); }
+    else if(/^\s*\d+\.\s+/.test(ln)){ if(!inList){out.push("<ul>");inList=true;} out.push(`<li>${inline(ln.replace(/^\s*\d+\.\s+/,""))}</li>`); }
+    else if(ln.trim()===""){ if(inList){out.push("</ul>");inList=false;} }
+    else out.push(`<p>${inline(ln)}</p>`);
+  }
+  if(inList) out.push("</ul>");
+  return out.join("\n");
+}
+
+/* ---------- boot ---------- */
+$("loginBtn").onclick = login;
+$("p").addEventListener("keydown", e => { if(e.key==="Enter") login(); });
+$("logout").onclick = logout;
+if(TOKEN){
+  // validate the stored token before showing the app
+  fetch("/api/v1/auth/me", {headers: auth()}).then(r => r.ok ? enterApp() : logout()).catch(logout);
+}
+</script>
+</body>
+</html>
