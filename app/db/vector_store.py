@@ -14,6 +14,7 @@ Both return ``RetrievedArticle`` objects.
 from __future__ import annotations
 
 import math
+import re
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass, field
@@ -21,7 +22,7 @@ from typing import Any, Protocol
 
 from app.core.config import settings
 from app.core.logging import get_logger
-from app.core.text_utils import normalize_arabic
+from app.core.text_utils import normalize_arabic, to_western_digits
 from app.db.pool import database
 from app.schemas.common import LegalSourceType
 from app.schemas.legal import RetrievedArticle
@@ -62,6 +63,13 @@ class VectorStore(Protocol):
         law_title_contains: str | None = None,
         document_id: str | None = None,
         min_similarity: float = 0.0,
+    ) -> list[RetrievedArticle]: ...
+
+    async def find_by_article_number(
+        self,
+        article_number: str,
+        source_types: list[str] | None = None,
+        limit: int = 3,
     ) -> list[RetrievedArticle]: ...
 
     async def corpus_stats(self) -> list[dict[str, Any]]: ...
@@ -136,6 +144,44 @@ class PgVectorStore:
         )
         return [_row_to_article(r) for r in rows]
 
+    async def find_by_article_number(
+        self,
+        article_number: str,
+        source_types: list[str] | None = None,
+        limit: int = 3,
+    ) -> list[RetrievedArticle]:
+        """Exact article lookup, independent of embedding similarity.
+
+        A party who cites «المادة 191» must get *that* article. A semantic search
+        for the literal string is not reliable across a corpus this size, and it
+        cannot tell which code the number belongs to when several codes share it.
+        """
+        target = _digits_only(article_number)
+        if not target:
+            return []
+        rows = await database.fetch(
+            "select a.id as article_id, a.document_id, a.source_type, d.title_ar, d.law_number, "
+            "       a.article_number, a.article_label, a.chapter, a.heading_ar, a.content_ar, "
+            "       d.source_url, d.metadata -> 'provenance' ->> 'quality' as text_quality, "
+            "       (d.metadata -> 'provenance' ->> 'verbatim')::boolean as verbatim "
+            "from legal_articles a "
+            "join legal_documents d on d.id = a.document_id "
+            "where regexp_replace(normalize_digits(a.article_number), '\\D', '', 'g') = $1 "
+            "  and ($2::text[] is null or a.source_type::text = any($2::text[])) "
+            "order by a.chunk_index "
+            "limit $3",
+            target,
+            source_types,
+            limit,
+        )
+        articles: list[RetrievedArticle] = []
+        for row in rows:
+            data = dict(row)
+            data.setdefault("similarity", 1.0)
+            data.setdefault("fused_score", 1.0)
+            articles.append(_row_to_article(data))
+        return articles
+
     async def corpus_stats(self) -> list[dict[str, Any]]:
         rows = await database.fetch("select * from legal_corpus_stats()")
         return [dict(r) for r in rows]
@@ -179,8 +225,40 @@ def _row_to_article(row: Any) -> RetrievedArticle:
     )
 
 
+def _chunk_to_article(
+    chunk: dict[str, Any],
+    document: dict[str, Any],
+    *,
+    similarity: float,
+    fused_score: float,
+) -> RetrievedArticle:
+    return RetrievedArticle(
+        article_id=chunk["id"],
+        document_id=chunk["document_id"],
+        source_type=LegalSourceType(chunk["source_type"]),
+        law_title=document.get("title_ar", ""),
+        law_number=document.get("law_number"),
+        article_number=chunk["article_number"],
+        article_label=chunk["article_label"],
+        chapter=chunk["chapter"],
+        heading=chunk["heading"],
+        content=chunk["content"],
+        similarity=_clamp(similarity),
+        fused_score=fused_score,
+    )
+
+
 def _clamp(value: float) -> float:
     return max(0.0, min(1.0, float(value)))
+
+
+_DIGITS_RE = re.compile(r"\D+")
+
+def _digits_only(value: str | None) -> str:
+    """Reduce an article number to its digits: «١٩١» / «المادة (191)» -> «191»."""
+    if not value:
+        return ""
+    return _DIGITS_RE.sub("", to_western_digits(str(value)))
 
 
 # ---------------------------------------------------------------------------
@@ -300,6 +378,32 @@ class InMemoryVectorStore:
                 )
             )
         return results
+
+    async def find_by_article_number(
+        self,
+        article_number: str,
+        source_types: list[str] | None = None,
+        limit: int = 3,
+    ) -> list[RetrievedArticle]:
+        target = _digits_only(article_number)
+        if not target:
+            return []
+        matches = [
+            chunk
+            for chunk in self.chunks.values()
+            if _digits_only(chunk.get("article_number")) == target
+            and (not source_types or chunk["source_type"] in source_types)
+        ]
+        matches.sort(key=lambda c: c.get("chunk_index", 0))
+        return [
+            _chunk_to_article(
+                chunk,
+                self.documents.get(chunk["document_id"], {}),
+                similarity=1.0,
+                fused_score=1.0,
+            )
+            for chunk in matches[:limit]
+        ]
 
     async def corpus_stats(self) -> list[dict[str, Any]]:
         buckets: dict[str, dict[str, Any]] = {}

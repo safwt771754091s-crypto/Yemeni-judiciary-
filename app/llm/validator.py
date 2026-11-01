@@ -38,6 +38,28 @@ def _article_key(label: str | None) -> str | None:
     return match.group(1) if match else None
 
 
+def _law_matches(citation_law: str | None, article_law: str | None) -> bool:
+    """Do two law titles refer to the same code?
+
+    Yemeni codes reuse article numbers (there is a «المادة 15» in almost every
+    law), so a citation must be matched to the code it names, not merely to the
+    number. Titles are compared normalised and by token overlap so that
+    «قانون المرافعات» still matches «قانون المرافعات والتنفيذ المدني اليمني».
+    """
+    if not citation_law or not article_law:
+        return True
+    left = normalize_arabic(citation_law)
+    right = normalize_arabic(article_law)
+    if not left or not right:
+        return True
+    if left in right or right in left:
+        return True
+    left_terms, right_terms = set(left.split()), set(right.split())
+    if not left_terms:
+        return True
+    return len(left_terms & right_terms) / len(left_terms) >= 0.6
+
+
 def _quote_matches(quote: str, content: str, *, min_overlap: float = 0.55) -> bool:
     """Verify a quote really comes from the cited article (fuzzy, Arabic-aware)."""
     if not quote:
@@ -63,18 +85,30 @@ def validate_citations(
 ) -> GroundingReport:
     """Keep only citations that resolve to a retrieved article with a real quote."""
     report = GroundingReport()
-    index: dict[str, dict[str, Any]] = {}
+    # Article numbers repeat across Yemeni codes, so the index keeps every
+    # candidate per number and the citation's own law title picks the right one.
+    index: dict[str, list[dict[str, Any]]] = {}
     for article in retrieved:
         key = _article_key(article.get("article_label") or article.get("article_number"))
         if key:
-            index[key] = article
+            index.setdefault(key, []).append(article)
 
     for citation in citations or []:
         label = citation.get("article_label") or citation.get("article_number") or ""
         key = _article_key(label)
-        source = index.get(key) if key else None
-        if source is None:
+        candidates = index.get(key) if key else None
+        if not candidates:
             report.unverified.append(str(label) or "(مادة بلا رقم)")
+            continue
+
+        citation_law = citation.get("law_title")
+        source = next(
+            (a for a in candidates if _law_matches(citation_law, a.get("law_title"))), None
+        )
+        if source is None:
+            # The article exists but not in the code the citation names: the
+            # number was resolved to the wrong statute, so do not verify it.
+            report.unverified.append(f"{label} (لا تطابق اسم القانون)")
             continue
 
         similarity = float(source.get("similarity") or 0.0)

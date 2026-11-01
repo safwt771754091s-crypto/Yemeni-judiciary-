@@ -45,6 +45,67 @@ def test_chunking_is_article_aware_and_stable():
     assert any(c.article_number == "11" for c in chunks)
 
 
+def test_validate_citations_rejects_number_from_the_wrong_code():
+    """A citation naming the Civil Code must not verify against the Procedure Code.
+
+    Both codes contain «المادة 191»; only the cited code's text may ground it.
+    """
+    retrieved = [
+        {
+            "article_label": "المادة (191)",
+            "law_title": "قانون المرافعات المدنية والتجارية اليمني",
+            "content": "إذا تعدد المدعون أو المدعى عليهم جاز إدخالهم في دعوى واحدة.",
+            "similarity": 0.9,
+            "article_id": "p191",
+            "source_type": "civil_procedure",
+        },
+        {
+            "article_label": "المادة (191)",
+            "law_title": "القانون المدني اليمني",
+            "content": "كل إضرار بالغير يلزم من أحدثه بالتعويض.",
+            "similarity": 0.4,
+            "article_id": "c191",
+            "source_type": "civil_law",
+        },
+    ]
+    citations = [
+        {
+            "article_label": "المادة (191)",
+            "law_title": "القانون المدني اليمني",
+            "quote": "كل إضرار بالغير يلزم من أحدثه بالتعويض",
+            "relevance": "التعويض عن الضرر",
+        }
+    ]
+    report = validate_citations(citations, retrieved)
+    assert report.verified, "the Civil Code citation must verify"
+    assert report.verified[0]["article_id"] == "c191"
+    assert report.verified[0]["source_type"] == "civil_law"
+
+
+def test_validate_citations_drops_article_absent_from_named_code():
+    retrieved = [
+        {
+            "article_label": "المادة (191)",
+            "law_title": "قانون المرافعات المدنية والتجارية اليمني",
+            "content": "إذا تعدد المدعون أو المدعى عليهم جاز إدخالهم في دعوى واحدة.",
+            "similarity": 0.9,
+            "article_id": "p191",
+            "source_type": "civil_procedure",
+        }
+    ]
+    citations = [
+        {
+            "article_label": "المادة (191)",
+            "law_title": "القانون المدني اليمني",
+            "quote": "كل إضرار بالغير يلزم من أحدثه بالتعويض",
+            "relevance": "التعويض عن الضرر",
+        }
+    ]
+    report = validate_citations(citations, retrieved)
+    assert report.verified == []
+    assert report.unverified and "لا تطابق اسم القانون" in report.unverified[0]
+
+
 def test_validate_citations_drops_invented_articles():
     retrieved = [
         {
