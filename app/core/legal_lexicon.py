@@ -254,6 +254,17 @@ def case_type_label(case_type: str | None) -> str:
     return CASE_TYPE_BY_KEY[key].label_ar if key else (case_type or "")
 
 
+def profile_terms(case_type: str | None) -> tuple[str, ...]:
+    """Strong then weak lexicon terms for a case type, most specific first."""
+    key = resolve_case_type(case_type)
+    if not key:
+        return ()
+    profile = CASE_TYPE_BY_KEY[key]
+    # Longest terms are the most specific ("اعتداء على سلامة الجسم" beats "اعتداء"),
+    # so they lead the search query and anchor the embedding.
+    return tuple(sorted(profile.strong + profile.weak, key=len, reverse=True))
+
+
 # --------------------------------------------------------------------------- #
 # Subject-matter and party extraction patterns
 # --------------------------------------------------------------------------- #

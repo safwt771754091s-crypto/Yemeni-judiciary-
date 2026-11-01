@@ -88,3 +88,71 @@ async def test_find_by_article_number_normalises_arabic_digits(seeded_store):
     store = seeded_store.store
     assert await store.find_by_article_number("١٤٦", source_types=["civil_law"])
     assert await store.find_by_article_number("146", source_types=["civil_law"])
+
+
+# --------------------------------------------------------------------------- #
+# Query planning: the plan must not dilute the legal signal
+# --------------------------------------------------------------------------- #
+async def test_plan_queries_drops_bare_structural_labels():
+    """A weak expansion model echoes digest labels back as "queries".
+
+    Used alone they match nothing topical and dilute reciprocal-rank fusion,
+    pushing the governing article below generic procedure ones.
+    """
+    case = {
+        "case_type": "جنائي",
+        "subject_matter": "اعتداء على سلامة الجسم وإحداث عاهة مستديمة",
+        "facts_summary": "أحالت النيابة العامة المتهم إلى المحكمة.",
+        "plaintiff_claims": [],
+        "defendant_responses": [],
+    }
+    queries = await retrieval_service.plan_queries(case)
+    for label in ("وقائع", "القضية", "النوع", "الموضوع"):
+        assert label not in queries, f"structural label {label!r} must not be a query"
+
+
+async def test_plan_queries_leads_with_a_focused_legal_query():
+    """The first query must be the term-dense one, not the diluted base text."""
+    case = {
+        "case_type": "جنائي",
+        "subject_matter": "إدانة المتهم",
+        "facts_summary": (
+            "المحكمة الابتدائية بأمانة العاصمة - الدائرة الجزائية، القضية رقم 6644/2026. "
+            "أحالت النيابة العامة المتهم بتهمة الاعتداء على سلامة الجسم وإحداث عاهة مستديمة."
+        ),
+        "plaintiff_claims": [],
+        "defendant_responses": [],
+    }
+    queries = await retrieval_service.plan_queries(case)
+    focused = queries[0]
+    # The governing offence must survive, and the case number must not.
+    assert "اعتداء على سلامة الجسم" in focused
+    assert "عاهة مستديمة" in focused
+    assert "6644" not in focused
+    assert "النيابة العامة" not in focused
+    assert "المحكمة" not in focused
+
+
+async def test_focused_query_keeps_specific_terms_and_drops_procedural_ones():
+    case = {
+        "case_type": "جنائي",
+        "subject_matter": "اعتداء على سلامة الجسم",
+        "facts_summary": "إحداث عاهة مستديمة بالمجني عليه باستعمال آلة حادة.",
+        "plaintiff_claims": [],
+        "defendant_responses": [],
+    }
+    focused = retrieval_service._focused_query(case)
+    assert "عاهة مستديمة" in focused
+    assert "النيابة العامة" not in focused
+    assert "المجني عليه" not in focused
+
+
+async def test_strip_boilerplate_removes_identifiers_not_substance():
+    from app.services.retrieval import _strip_boilerplate
+
+    cleaned = _strip_boilerplate(
+        "المحكمة الابتدائية القضية رقم 9911/2026 المتهم سامي عبده اعتدى على سلامة الجسم"
+    )
+    assert "9911/2026" not in cleaned
+    assert "المتهم" not in cleaned
+    assert "سلامة الجسم" in cleaned

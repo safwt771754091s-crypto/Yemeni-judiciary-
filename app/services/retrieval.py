@@ -20,6 +20,7 @@ import time
 from typing import Any
 
 from app.core.config import settings
+from app.core.legal_lexicon import profile_terms
 from app.core.logging import get_logger
 from app.core.text_utils import extract_article_numbers
 from app.db import vector_store as vector_store_module
@@ -48,6 +49,98 @@ def sources_for_case_type(case_type: str | None) -> list[str] | None:
     if not case_type:
         return None
     return DEFAULT_SOURCE_TYPES.get(case_type.strip())
+
+
+# Structural labels that appear in the case digest handed to the expansion chain.
+# A weak model echoes them back as "queries"; used alone they match nothing
+# topical and only dilute the reciprocal-rank fusion, pushing the truly
+# relevant articles down. They are dropped before they reach the store.
+_QUERY_STOPWORDS: frozenset[str] = frozenset(
+    {
+        "وقائع",
+        "القضية",
+        "النوع",
+        "الموضوع",
+        "الملخص",
+        "المطالب",
+        "الدفوع",
+        "المادة",
+        "القانون",
+        "المحكمة",
+        "المدعي",
+        "المدعى",
+        "عليه",
+        "الطلبات",
+        "الحكم",
+        "الدعوى",
+        "بيانات",
+        "النصوص",
+    }
+)
+
+
+def _sanitize_query(text: str) -> str:
+    """Drop expansion output that is a bare structural label rather than a query."""
+    cleaned = re.sub(r"\s+", " ", text or "").strip(" :،.-«»")
+    tokens = cleaned.split()
+    if not tokens or len(cleaned) < 3:
+        return ""
+    if all(token in _QUERY_STOPWORDS for token in tokens):
+        return ""
+    return cleaned
+
+
+# A scanned or pasted filing opens with the court heading, the case number and
+# the party labels. None of it is legal substance, but it is long enough to
+# dominate the embedding of the base query, so it is removed before searching.
+_CASE_NUMBER_RE = re.compile(r"\b\d{1,4}\s*/\s*\d{2,4}\b")
+
+
+def _strip_boilerplate(text: str) -> str:
+    """Remove case numbers, court headings and party labels from a search query."""
+    cleaned = _CASE_NUMBER_RE.sub(" ", text)
+    cleaned = cleaned.replace("القضية رقم", " ").replace("قضية رقم", " ")
+    for label in ("المدعي", "المدعى عليه", "المتهم", "المجني عليه", "الطلبات", "النيابة العامة"):
+        cleaned = cleaned.replace(label, " ")
+    return re.sub(r"\s+", " ", cleaned).strip()
+
+
+# Terms that describe the parties or the procedural posture rather than the
+# legal subject matter. They are common in every filing of a given type, so
+# including them in a search query adds no discrimination - it only flattens
+# the embedding and pulls generic procedure articles above the governing one.
+_PROCEDURAL_TERMS: frozenset[str] = frozenset(
+    {
+        "النيابة العامة",
+        "المجني عليه",
+        "نيابة",
+        "نيابة عامة",
+        "بلاغ",
+        "شكوى جزائية",
+        "محضر",
+        "ضبط",
+        "تحقيق",
+        "التحريات",
+        "أمن",
+        "شرطة",
+        "القبض",
+        "التوقيف",
+        "التلبس",
+        "قاضي الجزاء",
+        "الدعوى الجزائية",
+        "قضية جنائية",
+        "متهم",
+        "إدانة",
+        "براءة",
+        "عقوبة",
+        "حبس",
+        "سجن",
+        "غرامة",
+        "جريمة",
+        "فعل جنائي",
+        "شكوى",
+    }
+)
 
 
 class RetrievalService:
@@ -140,7 +233,11 @@ class RetrievalService:
     async def plan_queries(self, case: dict[str, Any]) -> list[str]:
         """Expand the case into a handful of precise Arabic legal queries."""
         base = self._base_query(case)
-        queries: list[str] = [base]
+        queries: list[str] = []
+        focused = self._focused_query(case)
+        if focused:
+            queries.append(focused)
+        queries.append(base)
         try:
             result = await self._expansion_chain.run(
                 [
@@ -149,7 +246,7 @@ class RetrievalService:
                 ]
             )
             for item in (result.data or {}).get("queries", []) or []:
-                text = str(item).strip()
+                text = _sanitize_query(str(item))
                 if text and text not in queries:
                     queries.append(text)
         except Exception as exc:
@@ -160,6 +257,34 @@ class RetrievalService:
         return queries[:8]
 
     # -- helpers -----------------------------------------------------------
+    def _focused_query(self, case: dict[str, Any]) -> str:
+        """Build a short, term-dense query from the lexicon and the case facts.
+
+        A long free-text query averages its embedding across court headings,
+        party names and dates, which dilutes the legal signal and buries the
+        governing article. This query keeps only the legal vocabulary that the
+        case facts actually contain. Multi-word phrases ("اعتداء على سلامة
+        الجسم") and long single terms carry the specificity; short generic words
+        ("متهم", "عقوبة") only blur the embedding, so they are dropped when
+        enough specific terms are present.
+        """
+        corpus = " ".join(
+            str(case.get(field) or "")
+            for field in ("subject_matter", "facts_summary", "case_type")
+        )
+        for claim in case.get("plaintiff_claims") or []:
+            corpus += " " + str(claim.get("title") or "") + " " + str(claim.get("description") or "")
+        for response in case.get("defendant_responses") or []:
+            corpus += " " + str(response.get("description") or "")
+
+        present = [
+            term
+            for term in profile_terms(case.get("case_type"))
+            if term in corpus and term not in _PROCEDURAL_TERMS
+        ]
+        specific = [term for term in present if " " in term or len(term) >= 8]
+        return " ".join((specific or present)[:8])
+
     def _base_query(self, case: dict[str, Any]) -> str:
         parts = [case.get("subject_matter") or "", case.get("facts_summary") or ""]
         for claim in case.get("plaintiff_claims") or []:
@@ -167,7 +292,8 @@ class RetrievalService:
         for response in case.get("defendant_responses") or []:
             parts.append(response.get("description") or "")
         text = " ".join(p for p in parts if p)
-        return re.sub(r"\s+", " ", text).strip()[:1500] or "قواعد الالتزام والتعويض"
+        text = _strip_boilerplate(text)
+        return text[:1500] or "قواعد الالتزام والتعويض"
 
     def _case_digest(self, case: dict[str, Any]) -> str:
         claims = "؛ ".join(
