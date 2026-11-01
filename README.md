@@ -166,7 +166,9 @@ python scripts/apply_sql.py          # ينفّذ 001 ثم 002 عبر SUPABASE_D
 ### 3.4 إدخال المدونة القانونية اليمنية
 
 ```bash
-python scripts/seed_corpus.py        # المدونة التجريبية المرفقة (4 قوانين)
+# المدونة اليمنية الكاملة المرفقة (8 قوانين، ~4300 مادة)
+python scripts/seed_corpus.py --file app/data/corpus/yemeni_laws.json
+
 python scripts/seed_corpus.py --dry-run   # تقطيع فقط دون كتابة
 ```
 
@@ -231,9 +233,26 @@ curl -s -X POST http://localhost:8000/api/v1/auth/login \
 
 ### 3.7 Docker (اختياري)
 
+قاعدة Postgres/pgvector المحلية تُنشر على المنفذ **5433** (وليس 5432، تجنباً للتعارض مع أي
+Postgres مثبَّت على المضيف). لذلك يجب أن يشير `.env` إليها قبل التشغيل:
+
+```dotenv
+SUPABASE_DB_URL=postgresql://legal:legal@127.0.0.1:5433/legal_ai
+```
+
+> ⚠️ إذا تُركت قيمة `SUPABASE_DB_URL` على إعداد Supabase (`...pooler.supabase.com:5432`)
+> فسيفشل اتصال الـ API بقاعدة البيانات، ويظهر `/health/ready` بحالة `degraded`.
+
 ```bash
 docker compose up -d --build       # API + Postgres/pgvector محلي
 docker compose logs -f api
+curl -s localhost:8000/api/v1/health/ready   # يجب أن يكون status=ready
+```
+
+بعد أول تشغيل، حمّل المدونة القانونية داخل قاعدة البيانات المحلية:
+
+```bash
+python scripts/seed_corpus.py --file app/data/corpus/yemeni_laws.json
 ```
 
 ---
