@@ -25,7 +25,36 @@ _WHITESPACE = re.compile(r"\s+")
 ARTICLE_RE = re.compile(
     r"(?:المادة|مادة|م\.)\s*[\(\[]?\s*([0-9\u0660-\u0669]{1,5})\s*[\)\]]?\s*(?:مكرر(?:اً|ا)?)?",
 )
+# Heading and cross-reference share the same marker («المادة (23)»), so the two
+# can only be told apart from the surrounding words. A marker that continues a
+# sentence is a reference; one that opens a line is a heading. Treating a
+# reference as a heading split its article in two and produced a second chunk
+# for the referenced number, so a citation for that number could resolve to the
+# wrong text. Yemeni sources print headings glued to the previous sentence with
+# no line break, which is why the line position alone is not enough.
+_CROSS_REF_BEFORE = re.compile(
+    r"(?<![\u0621-\u064A])[وفبلك]?"
+    r"(?:احكام|أحكام|وفق|طبق|تطبيق|بموجب|موجب|مقتضي|مقتضى|مقتض|نصوص|نص|حكم|شان|بشان|بشأن|"
+    r"في|من|الي|إلى|على|عن|مع|حسب|سند|استناد|عملا|عملاً|مراعاة|المنصوص|المشار|المذكور|"
+    r"الوارد|الواردة|السابق|السابقة|ذات)\s*$"
+)
+_CROSS_REF_AFTER = re.compile(
+    r"^\s*(?:من\s+(?:هذا|هذه|ذلك|تلك|القانون|النظام|الدستور|المرسوم|القرار|اللائحة)"
+    r"|اعلاه|أعلاه|المذكور|المذكورة|المشار|السابق|السابقة|الاتي|الآتي|الآتية|ادناه|أدناه|مكرر)"
+)
 CHAPTER_RE = re.compile(r"^\s*(?:الباب|الفصل|القسم|الفرع)\s+[^\n]{0,120}$", re.MULTILINE)
+
+
+def _is_article_heading(text: str, match: re.Match[str]) -> bool:
+    """True when `match` opens an article rather than continuing a sentence."""
+    window_start = max(0, match.start() - 40)
+    line_start = text.rfind("\n", window_start, match.start())
+    if line_start != -1:
+        window_start = line_start + 1
+    if _CROSS_REF_BEFORE.search(text[window_start : match.start()]):
+        return False
+    return not _CROSS_REF_AFTER.match(text[match.end() : match.end() + 40])
+
 
 
 def normalize_arabic(text: str | None) -> str:
@@ -62,11 +91,15 @@ def extract_article_numbers(text: str) -> list[str]:
 def split_into_articles(text: str) -> list[tuple[str | None, str]]:
     """Split a Yemeni legal code into (article_number, article_body) pairs.
 
+    A marker that continues a sentence is a cross-reference such as
+    «وفقاً لأحكام المادة (23) من هذا القانون», not a new article; only headings
+    open an article. See `_is_article_heading` for how the two are told apart.
+
     Falls back to a single (None, whole_text) pair when no article markers are
     found, which keeps free-form documents ingestible.
     """
     normalised = text.replace("\u00a0", " ")
-    matches = list(ARTICLE_RE.finditer(normalised))
+    matches = [m for m in ARTICLE_RE.finditer(normalised) if _is_article_heading(normalised, m)]
     if not matches:
         stripped = normalised.strip()
         return [(None, stripped)] if stripped else []
