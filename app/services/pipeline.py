@@ -90,6 +90,9 @@ class CasePipeline:
             case_type=request.case_type,
         )
         article_dicts = [a.model_dump(mode="json") for a in articles]
+        mismatch = await self.retrieval.embedding_mismatch_warning()
+        if mismatch:
+            warnings.append(mismatch)
         if not articles:
             warnings.append(
                 "لم يتم العثور على نصوص قانونية يمنية مطابقة في قاعدة البيانات. "

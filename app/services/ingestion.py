@@ -72,7 +72,13 @@ class IngestionService:
                 chunk_index=chunk.chunk_index,
                 token_count=chunk.token_count,
                 embedding=embedding,
-                metadata={**chunk.metadata, "law_title": document.title_ar},
+                metadata={
+                    **chunk.metadata,
+                    "law_title": document.title_ar,
+                    # Provenance for the vector: lets retrieval detect an index
+                    # built by a different embedding model (a different space).
+                    "embedding_model": self.embedder.model,
+                },
             )
             for chunk, embedding in zip(chunks, embeddings, strict=True)
         ]

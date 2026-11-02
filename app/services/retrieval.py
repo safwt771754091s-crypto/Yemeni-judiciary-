@@ -153,6 +153,27 @@ class RetrievalService:
         """Resolve the active store lazily so config changes/tests take effect."""
         return vector_store_module.vector_store
 
+    async def embedding_mismatch_warning(self) -> str | None:
+        """Warn when the index was built with a different embedding model.
+
+        Vectors from another model live in a different space, so cosine
+        similarity is meaningless and the vector half of hybrid retrieval
+        silently degrades to noise. Lexical search still works, which is why
+        this is a warning rather than an error: the fix is to re-index.
+        """
+        try:
+            stored = await self.store.embedding_models()
+        except Exception:  # pragma: no cover - introspection must never break retrieval
+            return None
+        current = self.embedder.model
+        stale = {m for m in stored if m != current}
+        if not stale:
+            return None
+        return (
+            f"الفهرس مبني بموديل متجهات مختلف ({', '.join(sorted(stale))}) بينما "
+            f"الموديل الحالي ({current})؛ أعد فهرسة النصوص القانونية لضمان دقة البحث."
+        )
+
     # -- public API --------------------------------------------------------
     async def retrieve(self, query: RetrievalQuery) -> list[RetrievedArticle]:
         embedding = await self.embedder.embed_query(query.query)

@@ -87,6 +87,16 @@ class VectorStore(Protocol):
 
     async def document_exists(self, source_type: str, law_number: str | None, year: int | None) -> str | None: ...
 
+    async def embedding_models(self) -> set[str]:
+        """The distinct embedding models that built the stored vectors.
+
+        Switching embedding provider/model leaves the vectors in a different
+        space: cosine similarity is then meaningless and retrieval silently
+        returns noise. Recording the model per chunk lets retrieval detect the
+        mismatch and warn instead.
+        """
+        ...
+
 
 # ---------------------------------------------------------------------------
 # Postgres / pgvector implementation
@@ -203,6 +213,13 @@ class PgVectorStore:
 
     async def count_articles(self) -> int:
         return int(await database.fetchval("select count(*) from legal_articles") or 0)
+
+    async def embedding_models(self) -> set[str]:
+        rows = await database.fetch(
+            "select distinct metadata ->> 'embedding_model' as model from legal_articles "
+            "where embedding is not null"
+        )
+        return {str(r["model"]) for r in rows if r["model"]}
 
 
 class LegalDocumentAdminRepository:
@@ -756,6 +773,13 @@ class InMemoryVectorStore:
 
     async def count_articles(self) -> int:
         return len(self.chunks)
+
+    async def embedding_models(self) -> set[str]:
+        return {
+            str(c["metadata"].get("embedding_model"))
+            for c in self.chunks.values()
+            if c.get("embedding") and c.get("metadata", {}).get("embedding_model")
+        }
 
 
 def _cosine(a: Sequence[float], b: Sequence[float]) -> float:
