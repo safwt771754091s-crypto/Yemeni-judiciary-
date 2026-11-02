@@ -90,6 +90,7 @@ async def update_section(
 @router.delete(
     "/sections/{section_id}",
     status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
     summary="حذف قسم",
 )
 async def delete_section(section_id: str, admin: AdminDep, user: CurrentUserDep) -> None:
@@ -168,6 +169,7 @@ async def update_article(
 @router.delete(
     "/articles/{article_id}",
     status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
     summary="حذف مادة",
 )
 async def delete_article(article_id: str, admin: AdminDep, user: CurrentUserDep) -> None:
