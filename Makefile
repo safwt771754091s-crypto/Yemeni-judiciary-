@@ -1,4 +1,4 @@
-.PHONY: help install dev run seed sql test lint fmt docker-build docker-up clean
+.PHONY: help install dev run serve seed sql test lint fmt docker-build docker-up clean
 
 PY ?= .venv/bin/python
 PIP ?= .venv/bin/pip
@@ -14,6 +14,9 @@ dev: ## Run the API with autoreload
 
 run: ## Run the API (production-style)
 	$(PY) -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2
+
+serve: ## Bring up Docker + pgvector + corpus + API on PORT (default 12000)
+	PORT=$(PORT) ./scripts/serve_public.sh
 
 seed: ## Ingest the bundled Yemeni legal corpus
 	$(PY) scripts/seed_corpus.py
