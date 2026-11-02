@@ -1,4 +1,4 @@
-"""A transient provider failure must not discard a drafted judgment."""
+"""Provider behaviour the pipeline depends on: retries, and offline grounding."""
 from __future__ import annotations
 
 import pytest
