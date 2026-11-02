@@ -84,6 +84,31 @@ def test_chunking_is_article_aware_and_stable():
     assert any(c.article_number == "11" for c in chunks)
 
 
+def test_split_into_articles_ignores_the_م_abbreviation_inside_a_sentence():
+    """The sentence-final period must not read as the «م.» article marker.
+
+    «... تاريخ النطق بالحكم.» followed by the numbered paragraph «2 - ...» used to
+    match as «م. 2» and mint a phantom «المادة 2», so a citation for article 2
+    could resolve to a sub-paragraph of article 228.
+    """
+    text = (
+        "مادة (1)\n\n"
+        "يسمى هذا القانون قانون المرافعات والتنفيذ المدني.\n\n"
+        "مادة (2)\n\n"
+        "يقصد بالكلمات والعبارات الواردة في هذه المادة المعاني المبينة قرين كل منها.\n\n"
+        "مادة (228)\n\n"
+        "1- يجب على المحكمة تحرير نسخة الحكم الأصلية.\n\n"
+        "2 - بمجرد الانتهاء من ختم النسخة الأصلية للحكم.\n\n"
+        "م. 5 نص قانوني بالاختصار."
+    )
+    articles = split_into_articles(text)
+    numbers = [number for number, _ in articles if number]
+    assert numbers == ["1", "2", "228", "5"], numbers
+    article_two = next(body for number, body in articles if number == "2")
+    assert "يقصد بالكلمات والعبارات" in article_two
+    assert "بمجرد الانتهاء من ختم" not in article_two
+
+
 def test_validate_citations_drops_invented_articles():
     retrieved = [
         {

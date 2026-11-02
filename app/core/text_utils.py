@@ -21,9 +21,13 @@ _HAMZA_FORMS = re.compile(r"[ؤء]")
 _NON_WORD = re.compile(r"[^\u0621-\u064Aa-zA-Z0-9\u0660-\u0669\s]+")
 _WHITESPACE = re.compile(r"\s+")
 
-# Arabic article markers as they appear in Yemeni codes
+# Arabic article markers as they appear in Yemeni codes. The bare abbreviation
+# «م.» is guarded against a preceding Arabic letter: the sentence-ending period
+# after a word that ends in «م» (e.g. «... بالحكم.» before a numbered paragraph)
+# otherwise matched as «م. 2», minting a phantom «المادة 2» from a list item and
+# letting a citation for that number resolve to the wrong text.
 ARTICLE_RE = re.compile(
-    r"(?:المادة|مادة|م\.)\s*[\(\[]?\s*([0-9\u0660-\u0669]{1,5})\s*[\)\]]?\s*(?:مكرر(?:اً|ا)?)?",
+    r"(?:المادة|مادة|(?<![\u0621-\u064A])م\.)\s*[\(\[]?\s*([0-9\u0660-\u0669]{1,5})\s*[\)\]]?\s*(?:مكرر(?:اً|ا)?)?",
 )
 # Heading and cross-reference share the same marker («المادة (23)»), so the two
 # can only be told apart from the surrounding words. A marker that continues a
