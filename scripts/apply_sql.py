@@ -32,7 +32,9 @@ async def apply(files: list[Path]) -> int:
         print("SUPABASE_DB_URL is not set.", file=sys.stderr)
         return 2
 
-    conn = await asyncpg.connect(settings.supabase_db_url)
+    conn = await asyncpg.connect(
+        settings.supabase_db_url, timeout=settings.db_connect_timeout
+    )
     try:
         for path in files:
             sql = path.read_text(encoding="utf-8")

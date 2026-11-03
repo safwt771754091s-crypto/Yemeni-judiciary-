@@ -48,6 +48,7 @@ class Database:
                     min_size=settings.db_min_pool,
                     max_size=settings.db_max_pool,
                     command_timeout=settings.db_command_timeout,
+                    timeout=settings.db_connect_timeout,
                     init=self._init_connection,
                 )
                 logger.info("database pool created", extra={"max_size": settings.db_max_pool})

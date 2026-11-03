@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import socket
 import sys
 from pathlib import Path
 
@@ -25,6 +26,12 @@ os.environ["EMBEDDING_PROVIDER"] = "hash"
 os.environ["LLM_PROVIDER"] = "mock"
 os.environ["N8N_ENABLED"] = "false"
 os.environ["APP_ENV"] = "test"
+
+# The tests speak only to loopback. A connection that slips through to a real
+# host must fail in seconds, not block until the OS gives up and the run times
+# out. The loopback n8n receiver sets its own timeouts, so a small default is
+# safe here.
+socket.setdefaulttimeout(10.0)
 
 from app.db.repositories import case_repository
 from app.db.user_repository import section_repository, user_repository
