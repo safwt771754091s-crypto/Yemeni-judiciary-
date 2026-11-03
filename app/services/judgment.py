@@ -17,7 +17,9 @@ from pydantic import ValidationError
 from app.core.config import settings
 from app.core.errors import GroundingError
 from app.core.logging import get_logger
+from app.core.money import DEFAULT_CURRENCY, format_money
 from app.llm.chains import build_judgment_chain, build_reasoning_blocks
+from app.llm.prompts import build_commercial_block
 from app.llm.validator import GroundingReport, strip_unverified_reasoning, validate_citations
 from app.schemas.judgment import JudgmentDraft, JudgmentDraftEnvelope
 
@@ -35,10 +37,13 @@ class JudgmentService:
         evidence: list[dict[str, Any]],
         articles: list[dict[str, Any]],
         evidence_analysis: list[dict[str, Any]],
+        commercial: Any | None = None,
     ) -> tuple[JudgmentDraftEnvelope, dict[str, Any]]:
         blocks = build_reasoning_blocks(
             case, articles, evidence, evidence_analysis=evidence_analysis
         )
+        if commercial is not None and getattr(commercial, "is_commercial", False):
+            blocks.insert(1, build_commercial_block(commercial))
         result = await self._chain.run(blocks)
 
         draft_payload = result.data or {}
@@ -47,6 +52,11 @@ class JudgmentService:
             warnings.append("مخرجات النموذج لم تطابق المخطط المتوقع وتم تصحيحها آلياً.")
 
         draft = self._coerce_draft(draft_payload, case)
+        # The financial summary is computed deterministically from the case file
+        # and the evidence, not read from the model: a figure in a judgment must
+        # be traceable, so the model is never the source of an amount.
+        if commercial is not None and getattr(commercial, "is_commercial", False):
+            draft.financial_summary = commercial.financial_summary
         report = validate_citations(
             (draft.reasoning.cited_articles and [c.model_dump() for c in draft.reasoning.cited_articles]) or [],
             articles,
@@ -60,6 +70,8 @@ class JudgmentService:
             draft = JudgmentDraft.model_validate(cleaned)
         except ValidationError as exc:  # pragma: no cover - defensive
             logger.warning("draft cleanup produced invalid model", extra={"error": str(exc)})
+        if commercial is not None and getattr(commercial, "is_commercial", False):
+            draft.financial_summary = commercial.financial_summary
 
         grounding = self._grounding_score(report, articles)
         warnings.extend(report.warnings)
@@ -198,7 +210,7 @@ def _money(amount: Any, currency: str | None) -> str:
     if amount is None:
         return ""
     try:
-        return f"{float(amount):,.2f} {currency or 'ريال يمني'}"
+        return format_money(float(amount), currency or DEFAULT_CURRENCY)
     except (TypeError, ValueError):
         return str(amount)
 
@@ -267,6 +279,37 @@ def render_markdown(envelope: JudgmentDraftEnvelope, case: dict[str, Any] | None
     if f.disputed_points:
         lines.append("**نقاط الخلاف:** " + "؛ ".join(f.disputed_points) + ".")
         lines.append("")
+
+    # الملخص المالي التجاري
+    fs = getattr(d, "financial_summary", None)
+    if fs is not None and fs.lines:
+        lines.append("### ثانياً مكرر: الملخص المالي التجاري")
+        lines.append("")
+        if fs.narrative:
+            lines.append(fs.narrative)
+            lines.append("")
+        lines.append("| البند | المطالب به | المعترف به | المقضي به | العملة |")
+        lines.append("|---|---|---|---|---|")
+        for line in fs.lines:
+            lines.append(
+                f"| {line.subject} | {_money(line.claimed_amount, line.currency)} "
+                f"| {_money(line.acknowledged_amount, line.currency)} "
+                f"| {_money(line.awarded_amount, line.currency)} | {line.currency} |"
+            )
+        lines.append(
+            f"| **الإجمالي** | **{_money(fs.total_claimed, fs.currency)}** "
+            f"| **{_money(fs.total_acknowledged, fs.currency)}** "
+            f"| **{_money(fs.total_awarded, fs.currency)}** | {fs.currency} |"
+        )
+        lines.append("")
+        if fs.reconciled is False and fs.reconciliation_note:
+            lines.append(f"> ⚠️ {fs.reconciliation_note}")
+            lines.append("")
+        if fs.evidence_kinds:
+            lines.append(
+                "**المستندات التجارية:** " + "، ".join(k.value for k in fs.evidence_kinds) + "."
+            )
+            lines.append("")
 
     # الأسباب والحيثيات
     lines.append("### ثالثاً: الأسباب والحيثيات")

@@ -27,6 +27,10 @@ class Settings(BaseSettings):
     db_min_pool: int = 1
     db_max_pool: int = 10
     db_command_timeout: float = 60.0
+    #: Bound on establishing a TCP/TLS connection to the database. Without it a
+    #: blocked or unreachable host stalls the caller until the OS gives up
+    #: (minutes), which reads as a hung command.
+    db_connect_timeout: float = 10.0
 
     # --- embeddings ---
     embedding_provider: Literal["hash", "openai"] = "hash"

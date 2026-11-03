@@ -23,7 +23,9 @@ from app.core.config import settings
 from app.core.errors import LLMError
 from app.core.logging import get_logger
 from app.llm.prompts import (
+    ASSISTANT_SYSTEM_PROMPT,
     CLASSIFICATION_PROMPT,
+    DRAFT_SYSTEM_PROMPT,
     EVIDENCE_SYSTEM_PROMPT,
     JUDGMENT_SYSTEM_PROMPT,
     QUERY_EXPANSION_PROMPT,
@@ -229,6 +231,23 @@ def build_judgment_chain(provider: LLMProvider | None = None) -> LegalChain:
         name="judgment_draft",
         system_prompt=JUDGMENT_SYSTEM_PROMPT,
         provider=provider,
+    )
+
+
+def build_assistant_chain(provider: LLMProvider | None = None) -> LegalChain:
+    return LegalChain(
+        name="legal_assistant",
+        system_prompt=ASSISTANT_SYSTEM_PROMPT,
+        provider=provider,
+    )
+
+
+def build_draft_chain(provider: LLMProvider | None = None) -> LegalChain:
+    return LegalChain(
+        name="legal_draft",
+        system_prompt=DRAFT_SYSTEM_PROMPT,
+        provider=provider,
+        max_tokens=3072,
     )
 
 

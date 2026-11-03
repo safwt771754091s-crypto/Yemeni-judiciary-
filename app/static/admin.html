@@ -46,6 +46,10 @@
   .pill.editor{background:#1c3a28;color:var(--ok);border-color:#2f6b47}
   .pill.reviewer{background:#2a2138;color:#c0a8e5;border-color:#4c3f6b}
   .pill.viewer{background:#26313c;color:var(--muted);border-color:var(--line)}
+  .pill.judge{background:#3a2f14;color:var(--gold2);border-color:#6b5a26}
+  .pill.lawyer{background:#1c3a28;color:var(--ok);border-color:#2f6b47}
+  .pill.prosecutor{background:#1c2f3a;color:#8ecbe5;border-color:#2f5a6b}
+  .pill.researcher{background:#2a2138;color:#c0a8e5;border-color:#4c3f6b}
   .msg{padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:12px;display:none}
   .msg.on{display:block}
   .msg.ok{background:#1c3a28;border:1px solid #2f6b47;color:var(--ok)}
@@ -63,10 +67,13 @@
 <header>
   <div>
     <h1>لوحة تحكم المنصة <span class="muted" style="font-size:13px">— الجمهورية اليمنية</span></h1>
-    <p>إدارة الأقسام والقوانين والمواد والمستخدمين والصلاحيات</p>
+    <p>إدارة الأقسام والقوانين والمواد والمستخدمين والصلاحيات ومراقبة النظام</p>
   </div>
-  <div style="display:flex;gap:10px;align-items:center">
+  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
     <a class="link" href="/">← واجهة المنصة</a>
+    <a class="link" href="/ui/judge.html">بوابة القاضي</a>
+    <a class="link" href="/ui/lawyer.html">بوابة المحامي</a>
+    <a class="link" href="/ui/assistant.html">المساعد الذكي</a>
     <a class="link" href="/docs" target="_blank">وثائق API</a>
     <span id="whoami" class="muted"></span>
     <button class="ghost hidden" id="logoutBtn">خروج</button>
@@ -96,6 +103,7 @@
       <button data-tab="articles">المواد</button>
       <button data-tab="users">المستخدمون والصلاحيات</button>
       <button data-tab="roles">الأدوار</button>
+      <button data-tab="monitor">مراقبة النظام</button>
     </div>
 
     <!-- الأقسام -->
@@ -168,10 +176,18 @@
           <div><label>كلمة المرور</label><input id="nuPass" type="password"></div>
           <div><label>الدور</label>
             <select id="nuRole">
-              <option value="admin">مدير</option>
-              <option value="editor">محرر</option>
-              <option value="reviewer">مراجع</option>
-              <option value="viewer" selected>مطّلع</option>
+              <optgroup label="إدارة المنصة">
+                <option value="admin">مدير</option>
+                <option value="editor">محرر</option>
+                <option value="reviewer">مراجع</option>
+                <option value="viewer" selected>مطّلع</option>
+              </optgroup>
+              <optgroup label="البوابات المتخصصة">
+                <option value="judge">قاضٍ</option>
+                <option value="lawyer">محامٍ</option>
+                <option value="prosecutor">عضو نيابة</option>
+                <option value="researcher">باحث قانوني</option>
+              </optgroup>
             </select></div>
         </div>
         <div class="row">
@@ -187,13 +203,34 @@
     <section id="tab-roles" class="hidden">
       <div class="card"><h2>أدوار المنصة وصلاحياتها</h2><div id="rolesBox"></div></div>
     </section>
+
+    <!-- مراقبة النظام -->
+    <section id="tab-monitor" class="hidden">
+      <div class="card"><h2>حالة النظام</h2><div id="monOverview" class="muted">جارٍ التحميل…</div></div>
+      <div class="card"><h2>سجل التدقيق ومراقبة الطلبات</h2>
+        <div class="row">
+          <div><label>تصفية حسب الكيان</label>
+            <select id="monEntity">
+              <option value="">— الكل —</option>
+              <option value="case">القضايا</option>
+              <option value="legal_document">القوانين</option>
+              <option value="legal_article">المواد</option>
+              <option value="section">الأقسام</option>
+              <option value="workspace">عناصر العمل</option>
+            </select></div>
+          <div style="display:flex;align-items:flex-end"><button id="monReload">تحديث</button></div>
+        </div>
+        <table id="monTable"></table>
+      </div>
+    </section>
   </div>
 </div>
 
 <script>
 const $ = s => document.querySelector(s);
 const esc = s => (s ?? '').toString().replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const ROLE_AR = {owner:'مالك المنصة', admin:'مدير', editor:'محرر', reviewer:'مراجع', viewer:'مطّلع'};
+const ROLE_AR = {owner:'مالك المنصة', admin:'مدير', editor:'محرر', reviewer:'مراجع', viewer:'مطّلع',
+  judge:'قاضٍ', lawyer:'محامٍ', prosecutor:'عضو نيابة', researcher:'باحث قانوني'};
 let TOKEN = sessionStorage.getItem('legal_token') || '';
 let ME = null;
 
@@ -382,11 +419,42 @@ async function loadRoles(){
 
 // --- التبويبات ---
 function showTab(name){
-  ['sections','laws','articles','users','roles'].forEach(t =>
+  ['sections','laws','articles','users','roles','monitor'].forEach(t =>
     $('#tab-' + t).classList.toggle('hidden', t !== name));
   document.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab===name));
+  if (name === 'monitor') loadMonitor();
 }
 document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => showTab(b.dataset.tab));
+
+// --- مراقبة النظام ---
+async function loadMonitor(){
+  try{
+    const o = await api('/admin/overview');
+    const u = o.users||{}, c = o.corpus||{};
+    $('#monOverview').innerHTML =
+      `<span class="pill admin">${esc(o.app_env)}</span>
+       <span class="muted">قاعدة البيانات: ${o.database ? 'متصلة' : 'محلية (دون قاعدة بيانات)'} ·
+       مخزن المتجهات: ${esc(o.vector_store)} · مزوّد النموذج: ${esc(o.llm_provider)} ·
+       التضمين: ${esc(o.embedding_provider)}</span>
+       <div style="margin-top:10px">
+         <b>${u.total||0}</b> مستخدم · <b>${u.active||0}</b> نشط ·
+         <b>${c.documents||0}</b> قانون · <b>${c.articles||0}</b> مادة ·
+         <b>${o.cases||0}</b> قضية · <b>${o.audit_events||0}</b> حدث تدقيق
+       </div>`;
+  }catch(e){ $('#monOverview').innerHTML = `<span class="muted">${esc(e.message)}</span>`; }
+  await loadAudit();
+}
+async function loadAudit(){
+  const entity = $('#monEntity').value;
+  const rows = await api('/admin/audit?limit=40' + (entity ? '&entity=' + encodeURIComponent(entity) : ''));
+  $('#monTable').innerHTML = '<tr><th>الكيان</th><th>الإجراء</th><th>المنفّذ</th><th>التفاصيل</th><th>الوقت</th></tr>' +
+    (rows.length ? rows.map(a => `<tr>
+      <td class="mono">${esc(a.entity)}</td><td>${esc(a.action)}</td>
+      <td>${esc(a.actor||'—')}</td>
+      <td class="mono" style="max-width:340px">${esc(JSON.stringify(a.payload||{}).slice(0,160))}</td>
+      <td class="muted">${esc((a.created_at||'').toString().replace('T',' ').slice(0,19))}</td>
+    </tr>`).join('') : '<tr><td colspan="5" class="muted">لا أحداث بعد.</td></tr>');
+}
 
 $('#loginBtn').onclick = login;
 $('#p').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
@@ -395,6 +463,8 @@ $('#sAdd').onclick = addSection;
 $('#lAdd').onclick = addLaw;
 $('#aLoad').onclick = loadArticles;
 $('#nuAdd').onclick = addUser;
+$('#monReload').onclick = loadMonitor;
+$('#monEntity').onchange = loadAudit;
 
 if (TOKEN) start().catch(() => logout());
 </script>

@@ -7,6 +7,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field, model_validator
 
+from app.schemas.commercial import FinancialSummary
 from app.schemas.common import JudgmentStatus, ORMModel
 
 
@@ -129,6 +130,9 @@ class JudgmentDraft(BaseModel):
     facts: JudgmentFacts
     reasoning: JudgmentReasoning
     verdict: JudgmentVerdict
+    financial_summary: FinancialSummary | None = Field(
+        default=None, description="الملخص المالي التجاري (للدعاوى التجارية)"
+    )
 
     @model_validator(mode="after")
     def _verdict_grounded(self) -> JudgmentDraft:

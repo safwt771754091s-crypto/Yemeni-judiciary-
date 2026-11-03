@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import socket
 import sys
 from pathlib import Path
 
@@ -26,9 +27,16 @@ os.environ["LLM_PROVIDER"] = "mock"
 os.environ["N8N_ENABLED"] = "false"
 os.environ["APP_ENV"] = "test"
 
+# The tests speak only to loopback. A connection that slips through to a real
+# host must fail in seconds, not block until the OS gives up and the run times
+# out. The loopback n8n receiver sets its own timeouts, so a small default is
+# safe here.
+socket.setdefaulttimeout(10.0)
+
 from app.db.repositories import case_repository
 from app.db.user_repository import section_repository, user_repository
 from app.db.vector_store import legal_document_admin_repository, reset_vector_store
+from app.db.workspace_repository import workspace_repository
 from app.schemas.legal import IngestTextRequest, LegalDocumentCreate
 from app.services.ingestion import ingestion_service
 
@@ -47,9 +55,11 @@ async def clean_state():
     case_repository._cases.clear()
     case_repository._evidence.clear()
     case_repository._judgments.clear()
+    case_repository._audit.clear()
     user_repository.reset()
     section_repository.reset()
     legal_document_admin_repository.reset()
+    workspace_repository.reset()
     yield
 
 

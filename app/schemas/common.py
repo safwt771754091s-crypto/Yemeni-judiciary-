@@ -62,6 +62,31 @@ class EvidenceType(str, Enum):
     admission = "admission"
     presumption = "presumption"
     inspection = "inspection"
+    # Commercial instruments (الأوراق والمستندات التجارية)
+    invoice = "invoice"                    # فاتورة
+    promissory_note = "promissory_note"    # سند لأمر
+    commercial_bill = "commercial_bill"    # كمبيالة
+    cheque = "cheque"                      # شيك
+    bank_transfer = "bank_transfer"        # حوالة بنكية
+    delivery_note = "delivery_note"        # إذن تسليم / سند استلام
+    commercial_ledger = "commercial_ledger"  # دفتر تجاري
+    letter_of_credit = "letter_of_credit"  # اعتماد مستندي
+
+
+class CommercialEvidenceKind(str, Enum):
+    """Evidence categories specific to commercial disputes."""
+
+    written_contract = "written_contract"          # عقد مكتوب
+    invoice = "invoice"                            # فاتورة
+    promissory_note = "promissory_note"            # سند لأمر
+    commercial_bill = "commercial_bill"            # كمبيالة
+    cheque = "cheque"                              # شيك
+    bank_transfer = "bank_transfer"                # حوالة بنكية / إشعار تحويل
+    delivery_note = "delivery_note"                # إذن تسليم / استلام بضاعة
+    commercial_ledger = "commercial_ledger"        # دفتر تجاري
+    letter_of_credit = "letter_of_credit"          # اعتماد مستندي
+    correspondence = "correspondence"              # مراسلات
+    other = "other"
 
 
 class ProofCategory(str, Enum):

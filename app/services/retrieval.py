@@ -22,7 +22,7 @@ from typing import Any
 from app.core.config import settings
 from app.core.legal_lexicon import profile_terms
 from app.core.logging import get_logger
-from app.core.text_utils import extract_article_numbers
+from app.core.text_utils import extract_article_numbers, normalize_arabic
 from app.db import vector_store as vector_store_module
 from app.llm.chains import build_query_expansion_chain
 from app.llm.embeddings import embedding_provider
@@ -49,6 +49,57 @@ def sources_for_case_type(case_type: str | None) -> list[str] | None:
     if not case_type:
         return None
     return DEFAULT_SOURCE_TYPES.get(case_type.strip())
+
+
+def law_priority(source_types: list[str] | None) -> dict[str, int]:
+    """Rank codes for a case type: earlier in ``DEFAULT_SOURCE_TYPES`` wins.
+
+    Article numbers are reused across Yemeni codes (there is a «المادة 15» in
+    almost every law), so a number cited by a party is ambiguous on its own.
+    The ordering of the case type's corpus is the best available signal for
+    which code a court would actually apply.
+    """
+    if not source_types:
+        return {}
+    return {source: index for index, source in enumerate(source_types)}
+
+
+#: Vocabulary of a commercial transaction dispute. Articles that actually speak
+#: to these matters are lifted above generic procedure ones, so a commercial
+#: case is grounded in the التجارة / المعاملات provisions it turns on.
+_COMMERCIAL_MARKERS: tuple[str, ...] = (
+    "تاجر", "الاعمال التجاريه", "عمل تجاري", "الاوراق التجاريه", "سند لامر",
+    "كمبياله", "شيك", "تظهير", "الوفاء", "حلول", "الاعتماد المستندي",
+    "شركه", "الشركات", "افلاس", "التصفيه", "السمسره", "الوكاله التجاريه",
+    "الفوائد", "الربا", "الشرط الجزايي", "الغرامه التاخيريه", "الفسخ",
+    "الالتزامات", "العقد", "البيع", "الايجار", "الرهن التجاري", "الحيازه",
+    "المطالبه بالدين", "الدين", "المدين", "الوفاء بالالتزام", "حسن النيه",
+)
+#: How much a commercial-relevant article is lifted. Small enough never to
+#: outrank a pinned citation, large enough to reorder generic topical hits.
+_COMMERCIAL_BOOST = 0.08
+
+
+def commercial_relevance(article: Any, case_type: str | None) -> float:
+    """Extra rank weight for an article in a commercial case.
+
+    Weighting is by (a) the governing code and (b) whether the article text
+    actually speaks to commercial transactions. A non-commercial case gets no
+    boost, so this cannot perturb other case types.
+    """
+    if (case_type or "").strip() not in {"تجاري", "commercial"}:
+        return 0.0
+    boost = 0.0
+    source = getattr(article, "source_type", None)
+    source_value = getattr(source, "value", source)
+    if source_value in {"commercial_law", "civil_law"}:
+        boost += _COMMERCIAL_BOOST
+    text = normalize_arabic(
+        f"{getattr(article, 'heading', '') or ''} {getattr(article, 'content', '') or ''}"
+    )
+    if any(marker in text for marker in _COMMERCIAL_MARKERS):
+        boost += _COMMERCIAL_BOOST
+    return boost
 
 
 # Structural labels that appear in the case digest handed to the expansion chain.
@@ -228,13 +279,20 @@ class RetrievalService:
         for article in pinned:
             merged.setdefault(article.article_id, article)
 
-        ranked = sorted(merged.values(), key=lambda a: (a.fused_score, a.similarity), reverse=True)
+        ranked = sorted(
+            merged.values(),
+            key=lambda a: (
+                a.fused_score + commercial_relevance(a, case_type or case.get("case_type")),
+                a.similarity,
+            ),
+            reverse=True,
+        )
         deduped = self._deduplicate(ranked)
         results = sorted(
             deduped,
             key=lambda a: (
                 (a.document_id, a.article_number or a.article_id) in pinned_keys,
-                a.fused_score,
+                a.fused_score + commercial_relevance(a, case_type or case.get("case_type")),
                 a.similarity,
             ),
             reverse=True,
@@ -275,7 +333,31 @@ class RetrievalService:
 
         for article in extract_article_numbers(base)[:5]:
             queries.append(f"المادة {article}")
-        return queries[:8]
+        for extra in self._commercial_queries(case):
+            if extra not in queries:
+                queries.append(extra)
+        return queries[:10]
+
+    @staticmethod
+    def _commercial_queries(case: dict[str, Any]) -> list[str]:
+        """Statutory search terms a commercial dispute turns on.
+
+        A commercial case is decided on the provisions about the commercial act,
+        the debt and its settlement, breach of contract, the penalty clause and
+        interest limits — not on generic civil procedure. These terms are added
+        as focused queries so the governing commercial provisions are retrieved
+        even when the pleading uses colloquial wording.
+        """
+        if str(case.get("case_type") or "").strip() not in {"تجاري", "commercial"}:
+            return []
+        return [
+            "الأعمال التجارية التزامات التاجر",
+            "الوفاء بالدين والمطالبة به",
+            "الشرط الجزائي والتعويض عن الإخلال بالالتزام",
+            "فسخ العقد والإخلال بالالتزام",
+            "الأوراق التجارية سند لأمر كمبيالة",
+            "حدود الفوائد والربا في المعاملات التجارية",
+        ]
 
     # -- helpers -----------------------------------------------------------
     def _focused_query(self, case: dict[str, Any]) -> str:
@@ -350,25 +432,38 @@ class RetrievalService:
     async def _pin_articles(
         self, article_numbers: list[str], source_types: list[str] | None
     ) -> list[RetrievedArticle]:
-        """Fetch cited articles by exact number.
+        """Fetch cited articles by exact number, preferring the governing code.
 
         A semantic search for the string "المادة 146" is not reliable across a
-        corpus this size, so cited articles are looked up by number.
+        corpus this size, so cited articles are looked up by number. Numbers are
+        reused across Yemeni codes, so when several codes share the number the
+        case type's corpus order decides which one a court would apply; the
+        other candidates are deliberately dropped rather than pinned, or they
+        would rank level with the governing article and let the draft cite the
+        wrong statute.
         """
+        priority = law_priority(source_types)
         pinned: list[RetrievedArticle] = []
         seen: set[str] = set()
         for number in article_numbers:
             try:
                 found = await self.store.find_by_article_number(
-                    number, source_types=source_types, limit=3
+                    number, source_types=source_types, limit=8
                 )
             except Exception:
                 continue
-            for article in found:
-                if article.article_id in seen:
-                    continue
-                seen.add(article.article_id)
-                pinned.append(article)
+            candidates = [a for a in found if a.article_id not in seen]
+            if not candidates:
+                continue
+            best = min(
+                enumerate(candidates),
+                key=lambda pair: (
+                    priority.get(pair[1].source_type.value, len(priority)),
+                    pair[0],
+                ),
+            )[1]
+            seen.add(best.article_id)
+            pinned.append(best)
         return pinned
 
     @staticmethod

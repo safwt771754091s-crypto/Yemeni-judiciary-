@@ -1,0 +1,50 @@
+# AGENTS.md
+
+Operational notes for any agent working in this repository.
+
+## The test suite is offline and must stay fast
+
+`tests/conftest.py` forces `SUPABASE_DB_URL=""`, `EMBEDDING_PROVIDER=hash`,
+`LLM_PROVIDER=mock` and `N8N_ENABLED=false` before the app is imported, so the
+suite needs no database, no network and no secrets. It runs in about 15 seconds.
+
+```bash
+.venv/bin/python -m pytest -q      # ~15s, no network
+.venv/bin/ruff check app tests scripts
+```
+
+Run these two commands after any change. Do not add tests that call a real
+database or a hosted LLM.
+
+## Never run a command that can block forever
+
+An automation run failed because a single command ran for ~12 minutes without
+output and was killed. Every command you run must be able to finish on its own:
+
+- Prefer the bounded test command above over ad-hoc scripts.
+- If you must run something that touches the network or a database, bound it
+  (`timeout 120 <cmd>`, or a client-level timeout) so it fails instead of
+  hanging.
+- Never start the dev server in the foreground of a command you need to return
+  from: it never exits, so the command hangs until it is killed. Start it in the
+  background with its output redirected
+  (`... > /tmp/server.log 2>&1 &`), poll it with `curl`, and stop it by PID.
+- `pytest.ini` sets a 120s per-test timeout (`pytest-timeout`) and
+  `tests/conftest.py` sets a 10s default socket timeout. Keep both. If you add a
+  dependency that opens connections, give it an explicit timeout.
+
+## Database connections
+
+`db_connect_timeout` in `app/core/config.py` (default 10s) bounds connection
+establishment; `db_command_timeout` (default 60s) bounds query execution. Pass
+`timeout=settings.db_connect_timeout` to any new `asyncpg` call. The app is
+designed to start degraded when the database is unreachable — never make
+startup depend on a successful connection.
+
+## Layout
+
+- `app/core` — config, Arabic text normalisation, money parsing, security.
+- `app/schemas` — Pydantic request/response and draft-judgment models.
+- `app/services` — ingestion, retrieval, evidence, commercial, judgment, pipeline.
+- `app/llm` — provider, prompts, chains, grounding validator.
+- `tests` — offline suite; `tests/conftest.py` holds the shared fixtures.

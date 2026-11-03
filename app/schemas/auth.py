@@ -3,9 +3,9 @@ from __future__ import annotations
 
 import uuid
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
-from app.core.permissions import Role
+from app.core.permissions import ROLE_LABELS_AR, Role
 from app.schemas.common import ORMModel
 
 
@@ -27,8 +27,17 @@ class UserOut(ORMModel):
     email: str | None = None
     full_name: str = ""
     role: Role
+    role_label_ar: str = ""
     is_active: bool = True
     permissions: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _fill_role_label(self) -> UserOut:
+        # Derive the Arabic role label from the role so every response path
+        # (login, me, user list) carries it without each route repeating it.
+        if not self.role_label_ar:
+            self.role_label_ar = ROLE_LABELS_AR.get(self.role, self.role.value)
+        return self
 
 
 class UserWithPermissions(UserOut):

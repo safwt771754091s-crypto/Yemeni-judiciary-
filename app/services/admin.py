@@ -175,5 +175,44 @@ class AdminService:
         )
         return result.model_dump(mode="json")
 
+    # -- monitoring --------------------------------------------------------
+    async def overview(self, user: dict[str, Any]) -> dict[str, Any]:
+        """System health snapshot for the admin dashboard."""
+        # Monitoring exposes platform internals and the user roster, so it is
+        # gated at admin level (users.read), not merely sections.read.
+        self.auth.require_permission(user, "users.read")
+        from app.core.config import settings
+        from app.db.vector_store import vector_store
+
+        try:
+            stats = await vector_store.corpus_stats()
+        except Exception:  # pragma: no cover - defensive
+            stats = []
+        users = await self.auth.list_users()
+        return {
+            "app_env": settings.app_env,
+            "database": settings.database_enabled,
+            "llm_provider": settings.llm_provider,
+            "embedding_provider": settings.embedding_provider,
+            "vector_store": type(vector_store).__name__,
+            "users": {
+                "total": len(users),
+                "active": sum(1 for u in users if u.get("is_active", True)),
+            },
+            "corpus": {
+                "documents": len(stats),
+                "articles": sum(int(s.get("articles") or 0) for s in stats),
+                "by_source": stats,
+            },
+            "cases": await case_repository.count_cases(),
+            "audit_events": await case_repository.count_audit(),
+        }
+
+    async def audit_trail(
+        self, user: dict[str, Any], *, limit: int = 50, offset: int = 0, entity: str | None = None
+    ) -> list[dict[str, Any]]:
+        self.auth.require_permission(user, "users.read")
+        return await case_repository.list_audit(limit=limit, offset=offset, entity=entity)
+
 
 admin_service = AdminService()

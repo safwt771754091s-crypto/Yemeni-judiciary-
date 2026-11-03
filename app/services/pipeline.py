@@ -33,6 +33,7 @@ from app.schemas.case import (
     CaseSubmissionResponse,
     EvidenceAssessment,
 )
+from app.services.commercial import commercial_engine
 from app.services.evidence import evidence_service
 from app.services.judgment import judgment_service, render_markdown
 from app.services.retrieval import retrieval_service
@@ -46,6 +47,7 @@ class CasePipeline:
         self.retrieval = retrieval_service
         self.evidence = evidence_service
         self.judgments = judgment_service
+        self.commercial = commercial_engine
 
     async def submit(self, request: CaseSubmissionRequest) -> CaseSubmissionResponse:
         started = time.perf_counter()
@@ -110,6 +112,15 @@ class CasePipeline:
                 case_id, [a.model_dump(mode="json") for a in evidence_analysis]
             )
 
+        # 3b. commercial financial extraction --------------------------------
+        commercial = self.commercial.extract(case=case, evidence=stored_evidence)
+        if request.commercial is not None:
+            self._merge_commercial_intake(commercial, request.commercial)
+        commercial.financial_summary = self.commercial.apply_awards(
+            commercial.financial_summary, []
+        )
+        warnings.extend(commercial.warnings)
+
         judgment_id = None
         envelope = None
         markdown = None
@@ -123,10 +134,19 @@ class CasePipeline:
                 evidence=stored_evidence,
                 articles=article_dicts,
                 evidence_analysis=[a.model_dump(mode="json") for a in evidence_analysis],
+                commercial=commercial if commercial.is_commercial else None,
             )
             warnings.extend(envelope.warnings)
             model = envelope.model
             grounding = envelope.grounding_score
+            # The awarded column comes from the verdict the engine produced, not
+            # from the model's prose: only a ruling that carries a figure counts.
+            commercial.financial_summary = self.commercial.apply_awards(
+                commercial.financial_summary,
+                [item.model_dump(mode="json") for item in envelope.draft.verdict.items],
+            )
+            if envelope.draft.financial_summary is not None:
+                envelope.draft.financial_summary = commercial.financial_summary
             markdown = render_markdown(envelope, case)
 
             record = await self.cases.save_judgment(
@@ -205,11 +225,33 @@ class CasePipeline:
             evidence_analysis=[
                 EvidenceAssessment.model_validate(a) for a in evidence_analysis
             ],
+            commercial=commercial,
             warnings=unique_warnings,
             pipeline_ms=round(pipeline_ms, 2),
             model=model,
             grounding_score=grounding,
         )
+
+    @staticmethod
+    def _merge_commercial_intake(commercial, intake) -> None:
+        """Let explicitly supplied commercial details override the extractor.
+
+        A client that already holds the contract terms should not have to trust
+        a parser, so anything supplied in the request takes precedence.
+        """
+        commercial.is_commercial = True
+        terms = commercial.terms
+        if intake.penalties:
+            terms.penalties = list(intake.penalties)
+        if intake.milestones:
+            terms.milestones = list(intake.milestones)
+        if intake.payment_deadline_days is not None:
+            terms.payment_deadline_days = intake.payment_deadline_days
+        if intake.interest_rate_percent is not None:
+            terms.interest_rate_percent = intake.interest_rate_percent
+        if intake.clauses:
+            known = {c.clause_type for c in terms.clauses}
+            terms.clauses.extend(c for c in intake.clauses if c.clause_type not in known)
 
 
 case_pipeline = CasePipeline()
