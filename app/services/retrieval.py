@@ -51,6 +51,19 @@ def sources_for_case_type(case_type: str | None) -> list[str] | None:
     return DEFAULT_SOURCE_TYPES.get(case_type.strip())
 
 
+def law_priority(source_types: list[str] | None) -> dict[str, int]:
+    """Rank codes for a case type: earlier in ``DEFAULT_SOURCE_TYPES`` wins.
+
+    Article numbers are reused across Yemeni codes (there is a «المادة 15» in
+    almost every law), so a number cited by a party is ambiguous on its own.
+    The ordering of the case type's corpus is the best available signal for
+    which code a court would actually apply.
+    """
+    if not source_types:
+        return {}
+    return {source: index for index, source in enumerate(source_types)}
+
+
 # Structural labels that appear in the case digest handed to the expansion chain.
 # A weak model echoes them back as "queries"; used alone they match nothing
 # topical and only dilute the reciprocal-rank fusion, pushing the truly
@@ -350,25 +363,38 @@ class RetrievalService:
     async def _pin_articles(
         self, article_numbers: list[str], source_types: list[str] | None
     ) -> list[RetrievedArticle]:
-        """Fetch cited articles by exact number.
+        """Fetch cited articles by exact number, preferring the governing code.
 
         A semantic search for the string "المادة 146" is not reliable across a
-        corpus this size, so cited articles are looked up by number.
+        corpus this size, so cited articles are looked up by number. Numbers are
+        reused across Yemeni codes, so when several codes share the number the
+        case type's corpus order decides which one a court would apply; the
+        other candidates are deliberately dropped rather than pinned, or they
+        would rank level with the governing article and let the draft cite the
+        wrong statute.
         """
+        priority = law_priority(source_types)
         pinned: list[RetrievedArticle] = []
         seen: set[str] = set()
         for number in article_numbers:
             try:
                 found = await self.store.find_by_article_number(
-                    number, source_types=source_types, limit=3
+                    number, source_types=source_types, limit=8
                 )
             except Exception:
                 continue
-            for article in found:
-                if article.article_id in seen:
-                    continue
-                seen.add(article.article_id)
-                pinned.append(article)
+            candidates = [a for a in found if a.article_id not in seen]
+            if not candidates:
+                continue
+            best = min(
+                enumerate(candidates),
+                key=lambda pair: (
+                    priority.get(pair[1].source_type.value, len(priority)),
+                    pair[0],
+                ),
+            )[1]
+            seen.add(best.article_id)
+            pinned.append(best)
         return pinned
 
     @staticmethod
