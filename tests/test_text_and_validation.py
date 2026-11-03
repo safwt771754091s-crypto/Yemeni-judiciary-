@@ -203,3 +203,35 @@ def test_validate_citations_rejects_number_from_the_wrong_code():
     assert report.verified, "the Civil Code citation must verify"
     assert report.verified[0]["article_id"] == "c191"
     assert report.verified[0]["law_title"] == "القانون المدني اليمني"
+
+
+def test_law_title_number_is_not_duplicated():
+    """A law title that already carries «رقم (14)» must not have it appended again.
+
+    Yemeni statute titles are self-describing: the Civil Code's ``title_ar`` is
+    «القانون المدني (قانون المعاملات المدنية) رقم (14) لسنة 2002م». Appending the
+    stored ``law_number`` produced «... رقم (14) لسنة 2002م رقم (14)» in the
+    judgment, the prompt and the citation property.
+    """
+    from app.core.text_utils import format_law_title
+
+    civil = "القانون المدني (قانون المعاملات المدنية) رقم (14) لسنة 2002م"
+    assert format_law_title(civil, "14") == civil
+
+    # An Arabic-Indic number in the title still counts as present.
+    assert format_law_title("قانون رقم (٢١) بشأن الإثبات", "21") == "قانون رقم (٢١) بشأن الإثبات"
+
+    # A title that does NOT mention its number still gets it appended.
+    assert (
+        format_law_title("القانون المدني اليمني", "14")
+        == "القانون المدني اليمني رقم (14)"
+    )
+
+    # No number at all -> title unchanged.
+    assert format_law_title("القانون المدني اليمني", None) == "القانون المدني اليمني"
+
+    # A different number in the title must not suppress the append.
+    assert (
+        format_law_title("قانون رقم (40) لسنة 2002م", "14")
+        == "قانون رقم (40) لسنة 2002م رقم (14)"
+    )

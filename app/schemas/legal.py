@@ -6,6 +6,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
+from app.core.text_utils import format_law_title
 from app.schemas.common import LegalSourceType, ORMModel
 
 
@@ -87,10 +88,7 @@ class RetrievedArticle(BaseModel):
 
     @property
     def citation(self) -> str:
-        law = self.law_title
-        if self.law_number:
-            law = f"{law} رقم ({self.law_number})"
-        return f"{self.article_label} من {law}"
+        return f"{self.article_label} من {format_law_title(self.law_title, self.law_number)}"
 
 
 class RetrievalQuery(BaseModel):

@@ -145,3 +145,24 @@ def format_article_label(article_number: str | None, fallback: str = "") -> str:
     if article_number:
         return f"المادة ({article_number})"
     return fallback
+
+
+def format_law_title(title: str | None, law_number: str | None) -> str:
+    """Return a law title carrying its number exactly once.
+
+    Yemeni statute titles are self-describing and already embed the number
+    («القانون المدني (قانون المعاملات المدنية) رقم (14) لسنة 2002م»), while the
+    stored ``law_number`` repeats it. Appending unconditionally printed the
+    number twice in the judgment and in the prompt's statute block. The number
+    is only appended when the title does not already carry that same number.
+    """
+    title = (title or "").strip()
+    if not title:
+        return "قانون"
+    number = (law_number or "").strip()
+    if not number:
+        return title
+    present = re.search(rf"\(\s*{re.escape(number)}\s*\)", to_western_digits(title))
+    if present:
+        return title
+    return f"{title} رقم ({number})"
