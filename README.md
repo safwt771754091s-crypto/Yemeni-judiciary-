@@ -341,8 +341,76 @@ curl -X POST http://localhost:8000/api/v1/cases/submit \
 | `judgment_markdown` | مسودة الحكم كاملة بصيغة Markdown |
 | `retrieved_articles` | المواد اليمنية المسترجعة ودرجات ملاءمتها |
 | `evidence_analysis` | تقييم كل دليل (الحجية، القبول، الوزن، التعليل) |
+| `commercial` | التحليل التجاري: البنود المالية (المطالب به/المعترف به/المقضي به)، الشروط الجزائية، آجال السداد، والمستندات التجارية |
 | `grounding_score` | نسبة الاستشهادات المسندة فعلاً إلى النصوص المسترجعة |
 | `warnings` | تحذيرات (نقص المدونة، استشهادات محذوفة…) |
+
+### دعوى تجارية (محرّك التقاضي التجاري والاستخلاص المالي)
+
+عندما تكون `case_type` = `تجاري` (أو يظهر في الملف ورقة تجارية كالكمبيالة أو سند
+الأمر)، يفعّل النظام **محرّك الاستخلاص المالي**: يستخرج البنود المالية من الطلبات
+والمستندات، ويفصل بين *المطالب به* و*المعترف به* و*المقضي به*، ويستخرج الشرط
+الجزائي ونسبته (مثال: 1% يومياً) وأجل السداد والمستندات التجارية المرفقة.
+
+```bash
+curl -X POST http://localhost:8000/api/v1/cases/submit \
+  -H "Content-Type: application/json" \
+  -d '{
+    "case_number": "ت-200/2026",
+    "case_type": "تجاري",
+    "court_name": "المحكمة التجارية - صنعاء",
+    "judge_name": "القاضي/ عمر",
+    "subject_matter": "المطالبة بقيمة بضاعة موردة وغرامة تأخيرية",
+    "facts_summary": "ورد المدعي للمدعى عليه بضاعة بموجب عقد مكتوب وكمبيالة، وتأخر المدعى عليه عن السداد.",
+    "currency": "YER",
+    "plaintiff": { "name": "شركة النور التجارية", "role": "plaintiff" },
+    "defendant": { "name": "مؤسسة الأمانة", "role": "defendant" },
+    "plaintiff_claims": [
+      {
+        "title": "قيمة البضاعة",
+        "description": "مبلغ وقدره خمسة ملايين ريال يمني",
+        "amount": 5000000,
+        "currency": "YER",
+        "legal_basis": ["المادة 146"]
+      },
+      {
+        "title": "غرامة تأخيرية",
+        "description": "غرامة تأخيرية بنسبة 1% يومياً وفق الشرط الجزائي",
+        "legal_basis": []
+      }
+    ],
+    "defendant_responses": [
+      {
+        "claim_ref": "قيمة البضاعة",
+        "response_type": "admission",
+        "description": "يعترف بقيمة البضاعة وقدرها خمسة ملايين ريال"
+      },
+      {
+        "claim_ref": "غرامة تأخيرية",
+        "response_type": "denial",
+        "description": "ينكر صحة الشرط الجزائي"
+      }
+    ],
+    "evidence": [
+      {
+        "id": "ev-1", "submitted_by": "plaintiff", "evidence_type": "contract",
+        "title": "عقد التوريد المكتوب",
+        "extracted_text": "يلتزم المشتري بالسداد خلال ثلاثين يوماً من تاريخ التسليم."
+      },
+      { "id": "ev-2", "submitted_by": "plaintiff", "evidence_type": "commercial_bill", "title": "كمبيالة رقم 12" },
+      { "id": "ev-3", "submitted_by": "plaintiff", "evidence_type": "invoice", "title": "فاتورة رقم 55" },
+      { "id": "ev-4", "submitted_by": "defendant", "evidence_type": "bank_transfer", "title": "حوالة بنكية" }
+    ],
+    "commercial": { "payment_deadline_days": 30 },
+    "generate_judgment": true,
+    "max_retrieved_articles": 10
+  }' | python -m json.tool
+```
+
+يمكن تمرير الكتلة الاختيارية `commercial` لفرض تفاصيل تجارية معروفة مسبقاً
+(آجال السداد، الشروط الجزائية، الفوائد)؛ وما يُمرَّر فيها يتقدّم على الاستخلاص الآلي.
+أما `commercial.financial_summary` في الاستجابة فيُحسب آلياً من ملف القضية والأدلة،
+ولا يُقرأ من مخرجات النموذج اللغوي، لضمان أن كل مبلغ في المسودة قابل للتتبع.
 
 ### استرجاع المسودة لاحقاً
 

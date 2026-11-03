@@ -7,6 +7,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
+from app.schemas.commercial import CommercialExtraction, CommercialIntake
 from app.schemas.common import (
     Admissibility,
     EvidenceStrength,
@@ -122,6 +123,11 @@ class CaseSubmissionRequest(BaseModel):
     )
     evidence: list[EvidenceItem] = Field(default_factory=list, description="الأدلة والأسانيد")
 
+    commercial: CommercialIntake | None = Field(
+        default=None,
+        description="بيانات تجارية اختيارية (الشروط الجزائية وآجال السداد) تتقدم على الاستخلاص الآلي",
+    )
+
     # engine controls
     generate_judgment: bool = Field(default=True, description="توليد مسودة الحكم")
     language: str = "ar"
@@ -171,6 +177,9 @@ class CaseSubmissionResponse(BaseModel):
     judgment_markdown: str | None = None
     retrieved_articles: list[dict[str, Any]] = Field(default_factory=list)
     evidence_analysis: list[EvidenceAssessment] = Field(default_factory=list)
+    commercial: CommercialExtraction | None = Field(
+        default=None, description="التحليل التجاري والاستخلاص المالي"
+    )
     warnings: list[str] = Field(default_factory=list)
     pipeline_ms: float
     model: str | None = None

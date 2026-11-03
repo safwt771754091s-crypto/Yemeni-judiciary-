@@ -365,12 +365,63 @@ def _mock_judgment(prompt: str, articles: list[dict[str, Any]]) -> dict[str, Any
                     "في الأسباب.",
                     "legal_basis": basis,
                 },
+                *_mock_financial_awards(prompt, basis),
             ],
             "costs": "ألزمت المحكمة المدعى عليه بالمصاريف ومقابل أتعاب المحاماة.",
             "final": True,
             "appeal_deadline": "خلال ثلاثين يوماً من تاريخ صدور الحكم أو إعلانه.",
         },
     }
+
+
+def _mock_financial_awards(prompt: str, basis: list[str]) -> list[dict[str, Any]]:
+    """Emit a quantified «إلزام» verdict item per commercial financial line.
+
+    The offline mock has no reasoning to do, but a commercial case still needs a
+    figure in the verdict or the awarded column stays empty and the financial
+    summary cannot be exercised. The acknowledged amount is awarded when the
+    defendant admitted it; otherwise the claimed amount is used.
+    """
+    if "البيانات التجارية والمالية المستخرجة" not in prompt:
+        return []
+    awards: list[dict[str, Any]] = []
+    row = re.compile(
+        r"^\|\s*(?P<subject>[^|]+?)\s*\|\s*(?P<claimed>[^|]+?)\s*\|\s*(?P<ack>[^|]+?)\s*\|"
+        r"\s*(?P<awarded>[^|]+?)\s*\|\s*(?P<currency>[^|]+?)\s*\|",
+        re.MULTILINE,
+    )
+    for match in row.finditer(prompt):
+        subject = match.group("subject").strip()
+        if subject in {"البند", "**الإجمالي**"} or subject.startswith("---"):
+            continue
+        ack = _mock_amount(match.group("ack"))
+        claimed = _mock_amount(match.group("claimed"))
+        amount = ack if ack is not None else claimed
+        if amount is None:
+            continue
+        awards.append(
+            {
+                "decision": "إلزام",
+                "subject": subject,
+                "amount": amount,
+                "currency": match.group("currency").strip() or "YER",
+                "detail": f"إلزام المدعى عليه بأداء مبلغ {amount:g} بموجب النصوص المستشهد بها.",
+                "legal_basis": basis,
+            }
+        )
+        if len(awards) >= 5:
+            break
+    return awards
+
+
+def _mock_amount(value: str) -> float | None:
+    value = value.strip().replace(",", "").replace("**", "")
+    if not value or value in {"—", "-"}:
+        return None
+    try:
+        return float(value)
+    except ValueError:
+        return None
 
 
 def _first_match(text: str, pattern: str) -> str | None:

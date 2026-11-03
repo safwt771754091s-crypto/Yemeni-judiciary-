@@ -12,6 +12,8 @@ Design goals
 """
 from __future__ import annotations
 
+from typing import Any
+
 from app.core.config import settings
 
 GROUNDING_CONTRACT = """
@@ -158,6 +160,77 @@ def build_retrieved_statutes_block(articles: list[dict]) -> str:
         if article.get("similarity") is not None:
             lines.append(f"    درجة الملاءمة: {float(article['similarity']):.3f}")
         lines.append("")
+    return "\n".join(lines)
+
+
+def build_commercial_block(commercial: Any) -> str:
+    """Render the extracted commercial facts as a prompt block.
+
+    The figures here are computed deterministically from the case file. The
+    model must reason over them, not invent new ones - so the block states the
+    claimed/acknowledged/awarded split explicitly and forbids inventing amounts.
+    """
+    summary = commercial.financial_summary
+    terms = commercial.terms
+    lines = ["«البيانات التجارية والمالية المستخرجة» (لا تُغيّر أي مبلغ ورد فيها):", ""]
+    if summary.lines:
+        lines.append("| البند | المطالب به | المعترف به | المقضي به | العملة | السند |")
+        lines.append("|---|---|---|---|---|---|")
+        for line in summary.lines:
+            lines.append(
+                f"| {line.subject} | {line.claimed_amount if line.claimed_amount is not None else '—'} "
+                f"| {line.acknowledged_amount if line.acknowledged_amount is not None else '—'} "
+                f"| {line.awarded_amount if line.awarded_amount is not None else '—'} "
+                f"| {line.currency} | {line.basis or '—'} |"
+            )
+        lines.append("")
+        lines.append(
+            f"إجمالي المطالب به: {summary.total_claimed} {summary.currency} — "
+            f"المعترف به: {summary.total_acknowledged} — المقضي به: {summary.total_awarded}."
+        )
+    else:
+        lines.append("(لا توجد بنود مالية محددة)")
+    if summary.reconciled is False:
+        lines.append(
+            "تنبيه: يوجد تعارض بين المبلغ الرقمي والمبلغ المكتوب؛ يجب أن تُصرّح المحكمة بذلك "
+            "ولا تعتمد أيّاً منهما دون تحقق."
+        )
+    if terms.payment_deadline_days is not None:
+        lines.append(f"أجل السداد المتفق عليه: {terms.payment_deadline_days} يوماً.")
+    if terms.interest_rate_percent is not None:
+        lines.append(
+            f"نسبة الفائدة/العائد المذكورة: {terms.interest_rate_percent:g}% — يجب بحث مدى "
+            "موافقتها لأحكام الشريعة والقانون اليمني (الربا والفوائد)."
+        )
+    if terms.penalties:
+        lines.append("")
+        lines.append("الشروط الجزائية / الغرامات التأخيرية:")
+        for penalty in terms.penalties:
+            detail = penalty.description
+            if penalty.rate_percent is not None:
+                detail += f" (النسبة: {penalty.rate_percent:g}% {penalty.rate_period or ''})"
+            if penalty.amount is not None:
+                detail += f" (المقدار: {penalty.amount} {penalty.currency})"
+            lines.append(f"  - {detail.strip()}")
+    if terms.milestones:
+        lines.append("")
+        lines.append("آجال السداد:")
+        for milestone in terms.milestones:
+            extra = f" ({milestone.due_days} يوماً)" if milestone.due_days else ""
+            lines.append(f"  - {milestone.description}{extra}")
+    if summary.evidence_kinds:
+        lines.append("")
+        lines.append(
+            "المستندات التجارية المرفقة: "
+            + "، ".join(kind.value for kind in summary.evidence_kinds)
+            + "."
+        )
+    lines.append("")
+    lines.append(
+        "«المطلوب»: اعتمد هذه المبالغ كما هي في الحيثيات والمنطوق، وأضف في الأسباب "
+        "المبادئ التجارية ذات الصلة (حسن النية، إلزام المدين بالوفاء، حدود الشرط الجزائي "
+        "والفوائد) مستنداً حصراً إلى النصوص المسترجعة."
+    )
     return "\n".join(lines)
 
 
