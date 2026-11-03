@@ -137,6 +137,10 @@ class MockLLMProvider:
             return _mock_reasoning(prompt, articles)
         if task == "case_classification":
             return _mock_classification(prompt)
+        if task == "legal_assistant":
+            return _mock_assistant(prompt, articles)
+        if task == "legal_draft":
+            return _mock_draft(prompt, articles)
         return {"answer": "لا يمكن إصدار إجابة دون نصوص قانونية مسترجعة."}
 
 
@@ -146,6 +150,8 @@ MOCK_TASK_MARKERS: list[tuple[str, str]] = [
     ("legal_reasoning", "منهجية التحليل الإلزامية"),
     ("query_expansion", "استعلامات البحث"),
     ("case_classification", "تصنيف الدعاوى أمام المحاكم اليمنية"),
+    ("legal_assistant", "المساعد القانوني الذكي"),
+    ("legal_draft", "المساعد الصائغ"),
 ]
 
 
@@ -313,6 +319,151 @@ def _mock_classification(prompt: str) -> dict[str, Any]:
     return {
         "case_type": chosen,
         "reason": "أُبقي التصنيف المبدئي المحسوب من مؤشرات النص (مزوّد محلي دون شبكة).",
+    }
+
+
+def _mock_assistant(prompt: str, articles: list[dict[str, Any]]) -> dict[str, Any]:
+    """Answer a legal question from the retrieved statutes only.
+
+    The offline provider must never invent a rule. It repeats the question it
+    was asked and grounds every sentence in a statute that the retriever
+    actually returned, mirroring the anti-hallucination contract of the hosted
+    models so the assistant path is verifiable without a network.
+    """
+    question = _case_field(prompt, "السؤال") or _first_match(
+        prompt, r"«سؤال المستخدم»[:：]?\s*([^\n]+)"
+    )
+    question = (question or "استفسار قانوني").strip()
+    if not articles:
+        return {
+            "question": question,
+            "answer": (
+                "لم يتم العثور على نصوص قانونية يمنية مطابقة لسؤالك في المدونة الحالية، "
+                "ولا يمكن إصدار إجابة موثقة دون سند قانوني. يرجى إعادة صياغة السؤال أو "
+                "إثراء المدونة بالنصوص ذات الصلة."
+            ),
+            "reasoning": ["لا توجد نصوص مسترجعة تُسنِد إجابةً موثقة."],
+            "cited_articles": [],
+            "gap": "لا تتوفر نصوص قانونية مطابقة في قاعدة البيانات.",
+        }
+    primary = articles[0]
+    others = articles[1:4]
+    citations = [
+        {
+            "article_label": a["article_label"],
+            "law_title": a["law_title"],
+            "quote": (a.get("content") or "")[:240],
+            "relevance": "سند مباشر للاستفسار المطروح.",
+        }
+        for a in articles[:4]
+    ]
+    reasoning = [
+        f"السؤال القانوني: {question}",
+        f"النص الأنسب: {primary['article_label']} من {primary['law_title']}، "
+        "ويُطبَّق على الوقائع المعروضة بحسب عموم لفظه.",
+    ]
+    if others:
+        reasoning.append(
+            "وتُعضّد ذلك النصوص: "
+            + "، ".join(f"{a['article_label']} من {a['law_title']}" for a in others)
+            + "."
+        )
+    return {
+        "question": question,
+        "answer": (
+            f"الخلاصة: يُرجع في المسألة المطروحة إلى {primary['article_label']} من "
+            f"{primary['law_title']}؛ إذ ينص على: «{(primary.get('content') or '')[:200]}». "
+            "ويُستنتج من ذلك الحكم المطلوب على النحو المبيَّن في أسباب الاستدلال أدناه."
+        ),
+        "reasoning": reasoning,
+        "cited_articles": citations,
+        "gap": None,
+    }
+
+
+def _mock_draft(prompt: str, articles: list[dict[str, Any]]) -> dict[str, Any]:
+    """Draft a legal document offline, grounded in the retrieved statutes.
+
+    The offline path composes the document skeleton and cites only statutes the
+    retriever returned, so the drafting endpoint is verifiable without a
+    network. It never invents an article.
+    """
+    draft_type = _first_match(prompt, r"نوع المستند المطلوب[:：]?\s*([\w_]+)") or "memo"
+    brief = _first_match(prompt, r"«موجز الصياغة»[:：]?\s*\n?-?\s*([^\n]+)") or ""
+    brief = brief.strip() or "الموضوع المطلوب صياغته."
+    citations = [
+        {
+            "article_label": a["article_label"],
+            "law_title": a["law_title"],
+            "quote": (a.get("content") or "")[:240],
+            "relevance": "سند قانوني من النصوص المسترجعة.",
+        }
+        for a in articles[:5]
+    ]
+    titles = {
+        "contract": "مسودة عقد",
+        "defence": "مذكرة دفاع",
+        "charge": "قرار اتهام",
+        "memo": "مذكرة قانونية",
+        "judgment_note": "حيثيات حكم",
+    }
+    title = titles.get(draft_type, "مستند قانوني")
+    legal_basis = (
+        "؛ ".join(
+            f"{c['article_label']} من {c['law_title']}" for c in citations
+        )
+        or "لا توجد نصوص مسترجعة"
+    )
+    sections = {
+        "contract": [
+            ("التمهيد", brief),
+            ("أطراف العقد", "الطرف الأول والطرف الثاني وفق بيانات الطلب."),
+            ("موضوع العقد والالتزامات", "يلتزم كل طرف بما ورد في الموجز أعلاه."),
+            ("الضمانات والغرامات", f"تُقنَّن الالتزامات وفقاً لـ: {legal_basis}."),
+            ("القانون الواجب التطبيق وتسوية النزاع", f"يخضع العقد للقانون اليمني، وأساسه: {legal_basis}."),
+        ],
+        "defence": [
+            ("الوقائع", brief),
+            ("الدفوع الشكلية", "لا يظهر دفع شكلي يوقف النظر في الدعوى."),
+            ("الدفوع الموضوعية", f"تُبنى الدفوع على: {legal_basis}."),
+            ("الطلبات", "الحكم برفض الدعوى وإلزام المدعي بالمصاريف."),
+        ],
+        "charge": [
+            ("الوقائع", brief),
+            ("التوصيف القانوني", f"تُوصَّف الوقائع استناداً إلى: {legal_basis}."),
+            ("الأدلة", "الأدلة المرفقة بالملف وأقوال الشهود."),
+            ("منطوق القرار", "إحالة المتهم إلى المحكمة المختصة."),
+        ],
+        "memo": [
+            ("المسألة القانونية", brief),
+            ("الأسانيد", f"السند القانوني: {legal_basis}."),
+            ("التحليل", "يُطبَّق النص على الوقائع وفق عموم لفظه."),
+            ("الخلاصة", "الأخذ بالرأي القانوني المبني على النصوص أعلاه."),
+        ],
+        "judgment_note": [
+            ("الوقائع الموجزة", brief),
+            ("الأسباب القانونية", f"وحيث إنه استناداً إلى: {legal_basis}."),
+            ("النتيجة", "ترتيب الأثر القانوني على الوقائع."),
+        ],
+    }
+    lines = [f"# {title}", "", f"**الموجز:** {brief}", ""]
+    for index, (heading, body) in enumerate(sections.get(draft_type, sections["memo"]), start=1):
+        lines.append(f"## {index}. {heading}")
+        lines.append(body)
+        lines.append("")
+    if citations:
+        lines.append("## المراجع القانونية")
+        for c in citations:
+            lines.append(f"- {c['article_label']} — {c['law_title']}")
+    else:
+        lines.append("## المراجع القانونية")
+        lines.append("- لا توجد نصوص قانونية مسترجعة.")
+    notes = [] if articles else ["لم يتم العثور على نصوص مطابقة؛ يلزم إثراء المدونة."]
+    return {
+        "title": title,
+        "markdown": "\n".join(lines).strip(),
+        "cited_articles": citations,
+        "notes": notes,
     }
 
 

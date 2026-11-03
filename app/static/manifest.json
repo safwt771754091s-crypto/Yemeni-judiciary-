@@ -1,0 +1,53 @@
+{
+  "id": "/",
+  "name": "المنصة القضائية القانونية اليمنية",
+  "short_name": "القضاء اليمني",
+  "description": "منصة الذكاء الاصطناعي القانوني للجمهورية اليمنية: استرجاع النصوص القانونية، توليد مسودات الأحكام، والمساعد القانوني الذكي.",
+  "lang": "ar",
+  "dir": "rtl",
+  "start_url": "/?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "fullscreen", "minimal-ui"],
+  "orientation": "any",
+  "background_color": "#0f1720",
+  "theme_color": "#132030",
+  "categories": ["legal", "productivity", "education"],
+  "icons": [
+    {
+      "src": "/ui/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/ui/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/ui/icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "بوابة القاضي",
+      "short_name": "القاضي",
+      "url": "/ui/judge.html"
+    },
+    {
+      "name": "بوابة المحامي",
+      "short_name": "المحامي",
+      "url": "/ui/lawyer.html"
+    },
+    {
+      "name": "المساعد القانوني الذكي",
+      "short_name": "المساعد",
+      "url": "/ui/assistant.html"
+    }
+  ]
+}

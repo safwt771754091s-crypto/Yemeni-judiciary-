@@ -111,6 +111,24 @@ def create_app() -> FastAPI:
     if static_dir.is_dir():
         app.mount("/ui", StaticFiles(directory=str(static_dir), html=True), name="ui")
 
+        # The PWA manifest and service worker are served from the site root so
+        # the worker can claim the whole origin (scope "/"), not only /ui/.
+        # A worker at /ui/sw.js would otherwise be limited to the /ui/ subtree.
+        @app.get("/manifest.json", include_in_schema=False)
+        async def manifest() -> FileResponse:
+            return FileResponse(
+                str(static_dir / "manifest.json"),
+                media_type="application/manifest+json",
+            )
+
+        @app.get("/sw.js", include_in_schema=False)
+        async def service_worker() -> FileResponse:
+            return FileResponse(
+                str(static_dir / "sw.js"),
+                media_type="application/javascript",
+                headers={"Service-Worker-Allowed": "/", "Cache-Control": "no-cache"},
+            )
+
     @app.get("/", tags=["root"], summary="واجهة المنصة")
     async def root():
         index = static_dir / "index.html"

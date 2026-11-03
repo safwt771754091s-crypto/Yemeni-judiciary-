@@ -36,6 +36,7 @@ socket.setdefaulttimeout(10.0)
 from app.db.repositories import case_repository
 from app.db.user_repository import section_repository, user_repository
 from app.db.vector_store import legal_document_admin_repository, reset_vector_store
+from app.db.workspace_repository import workspace_repository
 from app.schemas.legal import IngestTextRequest, LegalDocumentCreate
 from app.services.ingestion import ingestion_service
 
@@ -54,9 +55,11 @@ async def clean_state():
     case_repository._cases.clear()
     case_repository._evidence.clear()
     case_repository._judgments.clear()
+    case_repository._audit.clear()
     user_repository.reset()
     section_repository.reset()
     legal_document_admin_repository.reset()
+    workspace_repository.reset()
     yield
 
 

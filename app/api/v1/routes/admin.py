@@ -51,6 +51,25 @@ class IngestLawRequest(BaseModel):
 
 
 # --------------------------------------------------------------------------- #
+# Monitoring
+# --------------------------------------------------------------------------- #
+@router.get("/overview", summary="نظرة عامة على حالة النظام (لوحة المشرف)")
+async def overview(admin: AdminDep, user: CurrentUserDep) -> dict:
+    return await admin.overview(user)
+
+
+@router.get("/audit", summary="سجل التدقيق ومراقبة الطلبات")
+async def audit_trail(
+    admin: AdminDep,
+    user: CurrentUserDep,
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    entity: str | None = Query(default=None),
+) -> list[dict]:
+    return await admin.audit_trail(user, limit=limit, offset=offset, entity=entity)
+
+
+# --------------------------------------------------------------------------- #
 # Sections
 # --------------------------------------------------------------------------- #
 @router.get("/sections", summary="قائمة أقسام المنصة")

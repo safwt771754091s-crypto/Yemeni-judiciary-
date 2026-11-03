@@ -3,6 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#132030">
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/ui/icons/icon-192.png">
+<link rel="apple-touch-icon" href="/ui/icons/icon-192.png">
 <title>منصة الذكاء الاصطناعي القانوني — الجمهورية اليمنية</title>
 <style>
   :root{
@@ -74,6 +78,14 @@
     <a href="/api/v1/health/ready" target="_blank">جاهزية النظام</a>
     <a href="/ui/intake.html">استلام القضية وتفصيلها آلياً</a>
     <a href="/ui/admin.html">لوحة التحكم (المالك/المدير)</a>
+  </div>
+  <div class="links" style="margin-top:8px;border-top:1px solid var(--line);padding-top:8px">
+    <span class="badge">بوابات الأدوار</span>
+    <a href="/ui/judge.html">بوابة القاضي</a>
+    <a href="/ui/lawyer.html">بوابة المحامي</a>
+    <a href="/ui/prosecution.html">بوابة النيابة العامة</a>
+    <a href="/ui/researcher.html">بوابة الباحث والطالب</a>
+    <a href="/ui/assistant.html">المساعد القانوني الذكي</a>
   </div>
 </header>
 
@@ -284,6 +296,13 @@ function show(d){
 
 $('#clearBtn').onclick = () => { $('#results').style.display = 'none'; };
 loadStats();
+
+// تسجيل عامل الخدمة لتمكين تثبيت التطبيق والعمل دون اتصال (PWA).
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => undefined);
+  });
+}
 </script>
 </body>
 </html>

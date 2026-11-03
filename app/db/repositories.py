@@ -50,6 +50,9 @@ class CaseRepository:
         self._cases: dict[str, dict[str, Any]] = {}
         self._evidence: dict[str, list[dict[str, Any]]] = {}
         self._judgments: dict[str, list[dict[str, Any]]] = {}
+        #: Bounded in-process audit trail (newest kept) for offline monitoring.
+        self._audit: list[dict[str, Any]] = []
+        self._audit_cap = 500
 
     @property
     def persistent(self) -> bool:
@@ -318,6 +321,20 @@ class CaseRepository:
     # -- audit -------------------------------------------------------------
     async def audit(self, entity: str, action: str, entity_id: str | None = None,
                     actor: str | None = None, payload: dict[str, Any] | None = None) -> None:
+        # Keep a bounded in-process trail as well as the durable one: the admin
+        # portal must show recent activity even when no database is configured.
+        self._audit.append(
+            {
+                "entity": entity,
+                "entity_id": str(entity_id) if entity_id else None,
+                "action": action,
+                "actor": actor,
+                "payload": _jsonable(payload) or {},
+                "created_at": _now(),
+            }
+        )
+        if len(self._audit) > self._audit_cap:
+            del self._audit[: len(self._audit) - self._audit_cap]
         if not self.persistent:
             return
         try:
@@ -332,6 +349,35 @@ class CaseRepository:
             )
         except Exception as exc:
             logger.warning("audit write failed", extra={"error": str(exc)})
+
+    async def list_audit(
+        self, *, limit: int = 50, offset: int = 0, entity: str | None = None
+    ) -> list[dict[str, Any]]:
+        """Recent audit entries, newest first (admin monitoring)."""
+        if self.persistent:
+            clause = "where entity = $3" if entity else ""
+            args: list[Any] = [limit, offset]
+            if entity:
+                args.append(entity)
+            rows = await database.fetch(
+                "select entity, entity_id, action, actor, payload, created_at "
+                f"from audit_log {clause} order by created_at desc limit $1 offset $2",
+                *args,
+            )
+            return [dict(r) for r in rows]
+        entries = list(self._audit)
+        if entity:
+            entries = [e for e in entries if e["entity"] == entity]
+        entries.reverse()
+        return entries[offset : offset + limit]
+
+    async def count_audit(self) -> int:
+        if self.persistent:
+            return int(await database.fetchval("select count(*) from audit_log") or 0)
+        return len(self._audit)
+
+    def reset_audit(self) -> None:
+        self._audit.clear()
 
 
 case_repository = CaseRepository()

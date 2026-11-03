@@ -25,6 +25,10 @@ output and was killed. Every command you run must be able to finish on its own:
 - If you must run something that touches the network or a database, bound it
   (`timeout 120 <cmd>`, or a client-level timeout) so it fails instead of
   hanging.
+- Never start the dev server in the foreground of a command you need to return
+  from: it never exits, so the command hangs until it is killed. Start it in the
+  background with its output redirected
+  (`... > /tmp/server.log 2>&1 &`), poll it with `curl`, and stop it by PID.
 - `pytest.ini` sets a 120s per-test timeout (`pytest-timeout`) and
   `tests/conftest.py` sets a 10s default socket timeout. Keep both. If you add a
   dependency that opens connections, give it an explicit timeout.
