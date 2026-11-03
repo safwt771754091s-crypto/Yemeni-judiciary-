@@ -38,6 +38,31 @@ def _article_key(label: str | None) -> str | None:
     return match.group(1) if match else None
 
 
+def _resolve_source(
+    candidates: list[dict[str, Any]] | None,
+    citation: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Pick the candidate article the citation actually names.
+
+    Without a law hint the best-scoring candidate wins. With one, only a
+    candidate from that law is acceptable, so a citation cannot be grounded in
+    the wrong code just because both print the same article number.
+    """
+    if not candidates:
+        return None
+    hint_type = (citation.get("source_type") or "").strip()
+    hint_title = normalize_arabic(citation.get("law_title") or "")
+    if hint_type:
+        scoped = [a for a in candidates if a.get("source_type") == hint_type]
+        if scoped:
+            candidates = scoped
+    elif hint_title:
+        scoped = [a for a in candidates if hint_title in normalize_arabic(a.get("law_title") or "")]
+        if scoped:
+            candidates = scoped
+    return max(candidates, key=lambda a: float(a.get("similarity") or 0.0))
+
+
 def _quote_matches(quote: str, content: str, *, min_overlap: float = 0.55) -> bool:
     """Verify a quote really comes from the cited article (fuzzy, Arabic-aware)."""
     if not quote:
@@ -61,18 +86,25 @@ def validate_citations(
     *,
     min_similarity: float = 0.0,
 ) -> GroundingReport:
-    """Keep only citations that resolve to a retrieved article with a real quote."""
+    """Keep only citations that resolve to a retrieved article with a real quote.
+
+    An article number alone does not identify a statute: «المادة 191» exists in
+    both the Civil Code and the Civil Procedure Code. Articles are therefore
+    indexed by number, and a citation that names a law (``law_title`` or
+    ``source_type``) is resolved against the matching candidate rather than
+    whichever article happened to be indexed last.
+    """
     report = GroundingReport()
-    index: dict[str, dict[str, Any]] = {}
+    index: dict[str, list[dict[str, Any]]] = {}
     for article in retrieved:
         key = _article_key(article.get("article_label") or article.get("article_number"))
         if key:
-            index[key] = article
+            index.setdefault(key, []).append(article)
 
     for citation in citations or []:
         label = citation.get("article_label") or citation.get("article_number") or ""
         key = _article_key(label)
-        source = index.get(key) if key else None
+        source = _resolve_source(index.get(key), citation) if key else None
         if source is None:
             report.unverified.append(str(label) or "(مادة بلا رقم)")
             continue
