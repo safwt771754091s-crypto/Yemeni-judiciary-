@@ -113,7 +113,8 @@
         <label>كلمة المرور</label><input id="loginPass" type="password" autocomplete="current-password">
         <div class="err hide" id="loginErr"></div>
         <div class="actions" style="margin-top:14px"><button class="ws-new" id="loginBtn" style="width:100%">دخول</button></div>
-        <p class="sub" style="margin-top:14px"><a href="/ui/index.html">← العودة إلى الصفحة التعريفية</a></p>
+        <p class="sub" style="margin-top:14px">ليس لديك حساب؟ <a href="/ui/signup.html">إنشاء حساب جديد</a></p>
+        <p class="sub" style="margin-top:8px"><a href="/ui/index.html">← العودة إلى الصفحة التعريفية</a></p>
       </div>
     </div>`;
   }

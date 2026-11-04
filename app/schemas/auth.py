@@ -14,11 +14,70 @@ class LoginRequest(BaseModel):
     password: str = Field(min_length=8, max_length=256)
 
 
+class SignupRequest(BaseModel):
+    """Self-service account creation.
+
+    The role is limited to the professional portals; the service also rejects
+    owner/admin/editor, so a client cannot escalate by sending a role directly.
+    """
+
+    username: str = Field(min_length=3, max_length=120, pattern=r"^[A-Za-z0-9._\-]+$")
+    password: str = Field(min_length=8, max_length=256)
+    full_name: str = Field(min_length=2, max_length=200)
+    email: str | None = Field(default=None, max_length=200)
+    role: Role | None = Field(default=None, description="دور البوابة المهنية (اختياري)")
+
+    @field_validator("username")
+    @classmethod
+    def _normalise_username(cls, v: str) -> str:
+        return v.strip()
+
+    @field_validator("full_name")
+    @classmethod
+    def _trim_name(cls, v: str) -> str:
+        cleaned = v.strip()
+        if len(cleaned) < 2:
+            raise ValueError("الاسم الكامل مطلوب")
+        return cleaned
+
+    @field_validator("email")
+    @classmethod
+    def _validate_email(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        cleaned = v.strip().lower()
+        if not cleaned:
+            return None
+        # Deliberately permissive: one @, a dot in the domain, no spaces.
+        if cleaned.count("@") != 1 or " " in cleaned:
+            raise ValueError("البريد الإلكتروني غير صالح")
+        local, _, domain = cleaned.partition("@")
+        if not local or "." not in domain or domain.startswith(".") or domain.endswith("."):
+            raise ValueError("البريد الإلكتروني غير صالح")
+        return cleaned
+
+    @field_validator("password")
+    @classmethod
+    def _password_strength(cls, v: str) -> str:
+        if len(v) < 8:
+            raise ValueError("كلمة المرور يجب أن تكون 8 أحرف على الأقل")
+        if v.isdigit() or v.isalpha():
+            raise ValueError("كلمة المرور يجب أن تجمع بين الحروف والأرقام")
+        return v
+
+
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     expires_in: int
     user: UserOut
+
+
+class SignupResponse(TokenResponse):
+    """A signed-in session, so the new account lands straight in its portal."""
+
+    role_portal: str | None = Field(default=None, description="البوابة المقترحة للدور")
+    role_portal_page: str | None = Field(default=None, description="رابط البوابة المقترحة")
 
 
 class UserOut(ORMModel):

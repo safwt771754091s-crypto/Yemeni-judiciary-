@@ -53,6 +53,19 @@ class UserRepository:
                 return dict(user)
         return None
 
+    async def get_by_email(self, email: str) -> dict[str, Any] | None:
+        if self.persistent:
+            return await database.fetchrow(
+                f"select {_USER_COLUMNS}, password_hash from platform_users "
+                "where lower(email) = lower($1)",
+                email,
+            )
+        target = email.strip().lower()
+        for user in self._users.values():
+            if (user.get("email") or "").strip().lower() == target:
+                return dict(user)
+        return None
+
     async def get(self, user_id: str | uuid.UUID) -> dict[str, Any] | None:
         if self.persistent:
             return await database.fetchrow(
@@ -92,6 +105,8 @@ class UserRepository:
     ) -> dict[str, Any]:
         if await self.get_by_username(username):
             raise ConflictError(f"اسم المستخدم «{username}» مستخدم بالفعل")
+        if email and await self.get_by_email(email):
+            raise ConflictError("هذا البريد الإلكتروني مسجَّل بالفعل")
         payload = {
             "id": uuid.uuid4(),
             "username": username,

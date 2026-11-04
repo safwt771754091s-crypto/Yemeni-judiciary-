@@ -139,6 +139,10 @@ LLM_API_KEY=sk-...
 JWT_SECRET=<قيمة عشوائية قوية: python -c "import secrets;print(secrets.token_urlsafe(48))">
 OWNER_USERNAME=owner
 OWNER_PASSWORD=<كلمة مرور قوية، غيّرها بعد أول دخول>
+
+# التسجيل الذاتي (اختياري) — يسمح للمستخدمين بإنشاء حساباتهم بأنفسهم
+ALLOW_SELF_SIGNUP=true
+SIGNUP_DEFAULT_ROLE=viewer
 ```
 
 > `EMBEDDING_PROVIDER=hash` و `LLM_PROVIDER=mock` يعملان بلا أي شبكة أو مفاتيح —
@@ -237,7 +241,37 @@ curl -s -X POST http://localhost:8000/api/v1/auth/login \
 | `reviewer` | مراجع | مراجعة المسودات واعتمادها |
 | `viewer` | مطّلع | قراءة فقط |
 
-### 3.7 Docker (اختياري)
+### 3.7 إنشاء الحساب الذاتي (على غرار Harvey)
+
+تتيح المنصة للمستخدمين إنشاء حساباتهم بأنفسهم من الصفحة **`/ui/signup.html`** دون
+انتظار موافقة المدير. عند نجاح التسجيل يُعاد رمز دخول فوراً ويُوجَّه المستخدم إلى
+بوابة دوره. الأدوار المتاحة للتسجيل هي **البوابات المهنية فقط** — `viewer`,
+`researcher`, `lawyer`, `judge`, `prosecutor` — ولا يمكن أبداً إنشاء حساب `owner`
+أو `admin` أو `editor` عبر التسجيل العام.
+
+```bash
+curl -s -X POST http://localhost:8000/api/v1/auth/signup \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "a.saleh",
+    "password": "Trial12345",
+    "full_name": "أحمد محمد صالح",
+    "email": "a.saleh@example.com",
+    "role": "lawyer"
+  }'
+```
+
+الرد يحوي `access_token` وبيانات المستخدم مع `role_label_ar` و`role_portal_page`
+(رابط بوابة الدور)، فينتقل العميل مباشرة إلى البوابة المناسبة.
+
+لإيقاف التسجيل الذاتي واعتماد الدعوات فقط، اضبط `ALLOW_SELF_SIGNUP=false`. عند
+تعطيله يبقى إنشاء الحسابات متاحاً لمالك المنصة والمدير عبر `POST /api/v1/auth/users`.
+
+قواعد التحقق: اسم مستخدم من 3 أحرف (`a-z`, `0-9`, `.`, `_`, `-`)، كلمة مرور من 8
+أحرف تجمع حروفاً وأرقاماً، اسم كامل إلزامي، وبريد إلكتروني اختياري وفريد. يُرفض
+تكرار اسم المستخدم أو البريد برمز `409`.
+
+### 3.8 Docker (اختياري)
 
 قاعدة Postgres/pgvector المحلية تُنشر على المنفذ **5433** (وليس 5432، تجنباً للتعارض مع أي
 Postgres مثبَّت على المضيف). لذلك يجب أن يشير `.env` إليها قبل التشغيل:
@@ -261,7 +295,7 @@ curl -s localhost:8000/api/v1/health/ready   # يجب أن يكون status=ready
 python scripts/seed_corpus.py --file app/data/corpus/yemeni_laws.json
 ```
 
-### 3.8 نشر بلا Docker (Postgres مثبَّت على المضيف)
+### 3.9 نشر بلا Docker (Postgres مثبَّت على المضيف)
 
 عند تعذّر تشغيل Docker (بيئات مقيّدة، خوادم CI)، استعمل سكربت النشر الأصلي. يقوم بأمر
 واحد بكل الخطوات: تثبيت PostgreSQL + pgvector إن لزم، تشغيل العنقود، إنشاء الدور
@@ -582,6 +616,8 @@ http://localhost:8000/ui/intake.html
 | الطريقة | المسار | الصلاحية | الوصف |
 |---|---|---|---|
 | POST | `/api/v1/auth/login` | عام | تسجيل الدخول واستلام رمز الوصول |
+| GET | `/api/v1/auth/signup` | عام | خيارات التسجيل الذاتي والأدوار المتاحة |
+| POST | `/api/v1/auth/signup` | عام | إنشاء حساب جديد (تسجيل ذاتي) |
 | GET | `/api/v1/auth/me` | مصادق | بيانات المستخدم وصلاحياته الفعّالة |
 | GET | `/api/v1/auth/permissions` | عام | كتالوج الصلاحيات وأدوار النظام |
 | GET | `/api/v1/auth/roles` | عام | الأدوار وتسمياتها العربية |
@@ -692,12 +728,15 @@ ruff check app scripts tests
 │   │                               #   intake (الاستلام والتفصيل), case_details (تفصيل الدعوى),
 │   │                               #   classification (تصنيف الدعوى), document_extraction (OCR),
 │   │                               #   n8n, auth (المالك), admin (إدارة المنصة)
-│   ├── static/                     # index.html, admin.html, intake.html (واجهة الاستلام)
+│   ├── static/                     # index.html, admin.html, intake.html, signup.html
 │   └── data/samples/               # مدونة يمنية تجريبية
 ├── sql/
 │   ├── 001_init_pgvector.sql       # الجداول والفهارس (HNSW, GIN, trigram)
 │   ├── 002_functions.sql           # match_legal_articles, normalize_arabic, upsert...
-│   └── 003_auth_rbac.sql           # platform_users, roles, sections, permissions
+│   ├── 003_auth_rbac.sql           # platform_users, roles, sections, permissions
+│   ├── 004_assistant.sql           # محادثات المساعد القانوني
+│   ├── 005_portal_workspace.sql    # مساحات عمل البوابات
+│   └── 006_portal_roles.sql        # أدوار البوابات على نوع user_role
 ├── scripts/
 │   ├── seed_corpus.py              # إدخال المدونة القانونية
 │   └── apply_sql.py                # تنفيذ مخطط SQL

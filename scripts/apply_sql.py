@@ -3,11 +3,15 @@
 
 Usage
 -----
-    python scripts/apply_sql.py                 # applies sql/001 then sql/002
+    python scripts/apply_sql.py                 # applies every sql/*.sql in order
     python scripts/apply_sql.py --file sql/002_functions.sql
     python scripts/apply_sql.py --print         # just print the SQL
 
 Requires SUPABASE_DB_URL. Uses asyncpg directly (no psql client needed).
+
+Every file is idempotent (``create ... if not exists`` / ``add value if not
+exists``), so applying the whole directory on each run is safe and keeps an
+existing database up to date with new migrations.
 """
 from __future__ import annotations
 
@@ -52,7 +56,7 @@ def main() -> int:
     parser.add_argument("--print", dest="print_only", action="store_true")
     args = parser.parse_args()
 
-    files = args.file or [SQL_DIR / "001_init_pgvector.sql", SQL_DIR / "002_functions.sql"]
+    files = args.file or sorted(SQL_DIR.glob("*.sql"))
     files = [f if f.is_absolute() else (SQL_DIR.parent / f) for f in files]
 
     if args.print_only:
