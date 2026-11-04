@@ -271,6 +271,20 @@ def _corpus_source_types() -> set[str]:
     return {entry["document"]["source_type"] for entry in payload["documents"]}
 
 
+def _excerpt_source_types() -> set[str]:
+    """Codes present in the fixture the offline suite actually seeds from."""
+    import json
+    from pathlib import Path
+
+    payload = json.loads(
+        (
+            Path(__file__).resolve().parents[1]
+            / "app/data/samples/yemeni_laws_excerpt.json"
+        ).read_text(encoding="utf-8")
+    )
+    return {entry["document"]["source_type"] for entry in payload["documents"]}
+
+
 def test_every_routed_source_type_exists_in_the_corpus():
     """A case type must never route to a code the corpus does not contain.
 
@@ -281,6 +295,22 @@ def test_every_routed_source_type_exists_in_the_corpus():
     routed = {source for sources in DEFAULT_SOURCE_TYPES.values() for source in sources}
     missing = routed - _corpus_source_types()
     assert not missing, f"case types route to codes absent from the corpus: {sorted(missing)}"
+
+
+def test_every_routed_source_type_exists_in_the_test_excerpt():
+    """The fixture the suite seeds from must cover every routed code.
+
+    The full-corpus guard above passed while the excerpt still omitted the
+    constitution, so an administrative case (إداري) retrieved nothing in the
+    offline suite even though the shipped corpus had the code. The fixture and
+    the routing table must stay in step too.
+    """
+    routed = {source for sources in DEFAULT_SOURCE_TYPES.values() for source in sources}
+    missing = routed - _excerpt_source_types()
+    assert not missing, (
+        f"case types route to codes absent from the test excerpt: {sorted(missing)}; "
+        "add them to KEEP in scripts/make_test_excerpt.py and regenerate"
+    )
 
 
 async def test_labour_case_retrieves_the_labour_code(seeded_store):
@@ -302,7 +332,6 @@ async def test_labour_case_retrieves_the_labour_code(seeded_store):
     assert any(r.source_type.value == "labour_law" for r in results), (
         "the labour code must be present in the labour case results"
     )
-
 
 # --------------------------------------------------------------------------- #
 # Routing coverage: every branch the classifier can emit must have a corpus
@@ -362,3 +391,29 @@ async def test_execution_case_retrieves_the_execution_codes(seeded_store):
     allowed = set(DEFAULT_SOURCE_TYPES["تنفيذ"])
     for article in results:
         assert article.source_type.value in allowed
+
+
+async def test_administrative_case_retrieves_the_constitution(seeded_store):
+    """The constitution must be retrievable for a case type that routes to it.
+
+    Regression: «إداري» routed to ``constitution``, which the test excerpt
+    omitted, so an administrative case retrieved nothing from the fixture even
+    though the shipped corpus contained the code.
+    """
+    results, _ = await retrieval_service.retrieve_for_case(
+        case={
+            "case_type": "إداري",
+            "subject_matter": "إلغاء قرار إداري صادر عن جهة إدارية",
+            "facts_summary": "أصدرت الجهة الإدارية قراراً بإلغاء تعيين المدعي دون سبب مشروع.",
+            "plaintiff_claims": [
+                {"title": "إلغاء القرار", "description": "إلغاء القرار الإداري المخالف للقانون"}
+            ],
+            "defendant_responses": [],
+        },
+        top_k=8,
+        case_type="إداري",
+    )
+    assert results, "an administrative case must retrieve at least one article"
+    assert any(r.source_type.value == "constitution" for r in results), (
+        "the constitution must be present in the administrative case results"
+    )

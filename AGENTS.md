@@ -8,6 +8,13 @@ Operational notes for any agent working in this repository.
 `LLM_PROVIDER=mock` and `N8N_ENABLED=false` before the app is imported, so the
 suite needs no database, no network and no secrets. It runs in about 15 seconds.
 
+The suite seeds from `app/data/samples/yemeni_laws_excerpt.json`, a trimmed copy
+of the full corpus. The excerpt must contain every code the case-type routing in
+`app/services/retrieval.py` names, or that case type retrieves nothing in the
+tests. Add the code to `KEEP` in `scripts/make_test_excerpt.py`, run
+`python scripts/make_test_excerpt.py`, and the guard test in
+`tests/test_retrieval.py` will keep the two in step.
+
 ```bash
 .venv/bin/python -m pytest -q      # ~15s, no network
 .venv/bin/ruff check app tests scripts
