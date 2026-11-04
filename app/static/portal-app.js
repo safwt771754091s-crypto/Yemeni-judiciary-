@@ -36,7 +36,7 @@
         <div class="spacer"></div>
         <nav class="nav" id="nav"></nav>
         <span class="user-chip" id="userChip"></span>
-        <button class="ghost sm" id="installBtn" style="display:none">تثبيت التطبيق</button>
+        <button class="ghost sm hide" id="installBtn">تثبيت التطبيق</button>
         <button class="ghost sm" id="logoutBtn">خروج</button>
       </header>
       <div class="wrap" id="app" style="display:none">

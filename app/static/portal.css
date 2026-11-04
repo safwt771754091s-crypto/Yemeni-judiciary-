@@ -156,3 +156,14 @@ footer{color:var(--muted);font-size:12px;text-align:center;padding:22px}
 .toast{position:fixed;inset-inline-start:20px;bottom:20px;z-index:60;
   background:#22303f;border:1px solid var(--gold);color:var(--ink);border-radius:10px;
   padding:12px 18px;font-size:13.5px;max-width:380px;box-shadow:0 8px 30px rgba(0,0,0,.45)}
+
+/* -- install ("add to home screen") ----------------------------------- */
+.install-modal{position:fixed;inset:0;z-index:80;display:flex;align-items:center;
+  justify-content:center;background:rgba(6,10,14,.72);padding:22px}
+.install-modal .im-box{width:100%;max-width:460px;background:var(--panel);
+  border:1px solid var(--line);border-radius:16px;padding:24px;
+  box-shadow:0 20px 60px rgba(0,0,0,.5)}
+.install-modal h3{margin:0 0 6px;color:var(--gold2);font-size:17px}
+.install-modal ol{margin:12px 0 4px;padding-inline-start:22px;font-size:14px;line-height:2}
+.install-modal li{color:var(--ink)}
+.install-modal .actions{justify-content:flex-end}

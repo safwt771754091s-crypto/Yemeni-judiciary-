@@ -130,6 +130,9 @@
     <a href="/docs" target="_blank">وثائق الـ API</a>
     <a href="/api/v1/health/ready" target="_blank">جاهزية النظام</a>
   </div>
+  <div style="margin-top:10px">
+    <button type="button" id="installBtn" style="display:none">📲 تثبيت التطبيق على الجوال</button>
+  </div>
 </header>
 
 <div class="wrap">
@@ -530,5 +533,6 @@ if(TOKEN){
   fetch("/api/v1/auth/me", {headers: auth()}).then(r => r.ok ? enterApp() : logout()).catch(logout);
 }
 </script>
+<script src="/ui/install.js"></script>
 </body>
 </html>

@@ -90,31 +90,21 @@
     },
   };
 
+  // The install/PWA logic lives in install.js (loaded before this file) so a
+  // single implementation serves the static pages and the role portals alike.
   const pwa = {
-    register() {
-      if (!("serviceWorker" in navigator)) return;
-      window.addEventListener("load", () => {
-        navigator.serviceWorker.register("/sw.js").catch(() => undefined);
-      });
+    get ready() { return Boolean(window.PWAInstall); },
+    register() { if (window.PWAInstall) window.PWAInstall.register(); },
+    installed() { return window.PWAInstall ? window.PWAInstall.isInstalled() : false; },
+    platform() { return window.PWAInstall ? window.PWAInstall.platform() : "desktop"; },
+    canPrompt() { return window.PWAInstall ? window.PWAInstall.canPrompt() : false; },
+    promptInstall() {
+      return window.PWAInstall ? window.PWAInstall.promptInstall() : Promise.resolve(null);
     },
-    installPrompt: null,
     wireInstallButton(selector) {
-      const button = document.querySelector(selector);
-      if (!button) return;
-      window.addEventListener("beforeinstallprompt", (event) => {
-        event.preventDefault();
-        pwa.installPrompt = event;
-        button.classList.remove("hide");
-      });
-      button.addEventListener("click", async () => {
-        if (!pwa.installPrompt) return;
-        pwa.installPrompt.prompt();
-        await pwa.installPrompt.userChoice;
-        pwa.installPrompt = null;
-        button.classList.add("hide");
-      });
-      window.addEventListener("appinstalled", () => button.classList.add("hide"));
+      if (window.PWAInstall) window.PWAInstall.wireButton(selector);
     },
+    showInstallHelp() { if (window.PWAInstall) window.PWAInstall.showHelp(); },
   };
 
   // -- a deliberately tiny markdown renderer -----------------------------

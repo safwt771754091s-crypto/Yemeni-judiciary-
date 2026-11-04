@@ -76,6 +76,7 @@
     <a class="link" href="/ui/assistant.html">المساعد الذكي</a>
     <a class="link" href="/docs" target="_blank">وثائق API</a>
     <span id="whoami" class="muted"></span>
+    <button class="ghost hidden" id="installBtn">📲 تثبيت التطبيق</button>
     <button class="ghost hidden" id="logoutBtn">خروج</button>
   </div>
 </header>
@@ -468,5 +469,6 @@ $('#monEntity').onchange = loadAudit;
 
 if (TOKEN) start().catch(() => logout());
 </script>
+<script src="/ui/install.js"></script>
 </body>
 </html>
