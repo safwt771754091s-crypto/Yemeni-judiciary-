@@ -102,6 +102,41 @@ def commercial_relevance(article: Any, case_type: str | None) -> float:
     return boost
 
 
+#: Vocabulary of an administrative-law dispute: the constitutional and statutory
+#: provisions about the civil service, the legality of administrative decisions
+#: and access to a court. An administrative case turns on these, not on the
+#: general civil procedure articles that dominate the corpus. Stored normalized
+#: (no hamza/taa marbuta) because it is matched against normalized article text.
+_ADMINISTRATIVE_MARKERS: tuple[str, ...] = (
+    "الخدمه العامه", "الوظيفه العامه", "الموظفون", "موظف عام", "حق التقاضي",
+    "اللجوي الي القضاي", "حق الدفاع", "الوحدات الاداريه", "المجالس المحليه",
+    "القرارات واللوايح", "اللوايح", "مجلس الوزراي", "الوزير", "الوزراي",
+    "المحكمه العليا", "استقلال القضاي", "السلطه القضاييه", "الرقابه", "المساواه",
+    "السياسه العامه", "التعيين", "المصلحه العامه",
+)
+#: How much an administrative-relevant article is lifted. Small enough never to
+#: outrank a pinned citation, large enough to reorder generic procedural hits.
+_ADMINISTRATIVE_BOOST = 0.02
+
+
+def administrative_relevance(article: Any, case_type: str | None) -> float:
+    """Extra rank weight for an article in an administrative case.
+
+    Weighting is by whether the article text actually speaks to the civil
+    service, the legality of an administrative decision or access to a court.
+    A non-administrative case gets no boost, so this cannot perturb other case
+    types.
+    """
+    if (case_type or "").strip() not in {"إداري", "اداري", "administrative"}:
+        return 0.0
+    text = normalize_arabic(
+        f"{getattr(article, 'heading', '') or ''} {getattr(article, 'content', '') or ''}"
+    )
+    if any(marker in text for marker in _ADMINISTRATIVE_MARKERS):
+        return _ADMINISTRATIVE_BOOST
+    return 0.0
+
+
 # Structural labels that appear in the case digest handed to the expansion chain.
 # A weak model echoes them back as "queries"; used alone they match nothing
 # topical and only dilute the reciprocal-rank fusion, pushing the truly
@@ -279,12 +314,18 @@ class RetrievalService:
         for article in pinned:
             merged.setdefault(article.article_id, article)
 
+        effective_case_type = case_type or case.get("case_type")
+
+        def rank_score(article: RetrievedArticle) -> float:
+            return (
+                article.fused_score
+                + commercial_relevance(article, effective_case_type)
+                + administrative_relevance(article, effective_case_type)
+            )
+
         ranked = sorted(
             merged.values(),
-            key=lambda a: (
-                a.fused_score + commercial_relevance(a, case_type or case.get("case_type")),
-                a.similarity,
-            ),
+            key=lambda a: (rank_score(a), a.similarity),
             reverse=True,
         )
         deduped = self._deduplicate(ranked)
@@ -292,7 +333,7 @@ class RetrievalService:
             deduped,
             key=lambda a: (
                 (a.document_id, a.article_number or a.article_id) in pinned_keys,
-                a.fused_score + commercial_relevance(a, case_type or case.get("case_type")),
+                rank_score(a),
                 a.similarity,
             ),
             reverse=True,
@@ -336,6 +377,9 @@ class RetrievalService:
         for extra in self._commercial_queries(case):
             if extra not in queries:
                 queries.append(extra)
+        for extra in self._administrative_queries(case):
+            if extra not in queries:
+                queries.append(extra)
         return queries[:10]
 
     @staticmethod
@@ -357,6 +401,29 @@ class RetrievalService:
             "فسخ العقد والإخلال بالالتزام",
             "الأوراق التجارية سند لأمر كمبيالة",
             "حدود الفوائد والربا في المعاملات التجارية",
+        ]
+
+    @staticmethod
+    def _administrative_queries(case: dict[str, Any]) -> list[str]:
+        """Statutory search terms an administrative dispute turns on.
+
+        An administrative case is decided on the constitutional and statutory
+        provisions about the civil service, the legality of administrative
+        decisions and access to a court — not on the generic civil procedure
+        articles that dominate the corpus. Without these focused queries the
+        formal constitutional provisions never surface for the case's own
+        colloquial wording, so an administrative case retrieved no constitution
+        articles at all.
+        """
+        if str(case.get("case_type") or "").strip() not in {"إداري", "اداري", "administrative"}:
+            return []
+        return [
+            "حق التقاضي واللجوء إلى القضاء",
+            "الخدمة العامة والوظيفة العامة",
+            "القرارات واللوائح الإدارية",
+            "الوحدات الإدارية والمجالس المحلية",
+            "استقلال القضاء ورقابة المشروعية",
+            "المساواة أمام القانون",
         ]
 
     # -- helpers -----------------------------------------------------------
