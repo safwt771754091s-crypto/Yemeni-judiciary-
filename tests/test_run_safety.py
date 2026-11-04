@@ -45,3 +45,23 @@ def test_pool_creation_passes_the_connect_timeout() -> None:
 def test_apply_sql_passes_the_connect_timeout() -> None:
     source = (ROOT / "scripts" / "apply_sql.py").read_text(encoding="utf-8")
     assert "timeout=settings.db_connect_timeout" in source
+
+
+def test_docs_do_not_teach_a_blocking_command() -> None:
+    """The README must not hand an agent a command that never returns.
+
+    Runs timed out because a command blocked until the automation deadline. The
+    usual culprit is a server started in the foreground, or a log tailed with
+    ``-f``. The docs are what an agent follows, so they must stay safe.
+    """
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert "uvicorn app.main:app" in readme, "the run section should still document the server"
+    for line in readme.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("#"):
+            continue
+        assert "logs -f" not in stripped, f"README teaches a blocking log tail: {stripped}"
+        if "uvicorn app.main:app" in stripped:
+            assert stripped.startswith("nohup") or "&" in stripped or stripped.startswith("pkill"), (
+                f"README starts the server in the foreground: {stripped}"
+            )

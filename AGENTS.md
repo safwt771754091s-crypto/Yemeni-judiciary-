@@ -36,6 +36,10 @@ output and was killed. Every command you run must be able to finish on its own:
   from: it never exits, so the command hangs until it is killed. Start it in the
   background with its output redirected
   (`... > /tmp/server.log 2>&1 &`), poll it with `curl`, and stop it by PID.
+- Never tail a log without a bound. `docker compose logs -f api` and
+  `tail -f` never return; use `--tail=50` / `tail -n 50` instead. The docs in
+  `README.md` follow this rule, and `tests/test_run_safety.py` fails the suite
+  if a foreground server or a `logs -f` reappears in them.
 - `pytest.ini` sets a 120s per-test timeout (`pytest-timeout`) and
   `tests/conftest.py` sets a 10s default socket timeout. Keep both. If you add a
   dependency that opens connections, give it an explicit timeout.
