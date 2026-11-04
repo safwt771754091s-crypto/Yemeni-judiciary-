@@ -107,10 +107,8 @@ set -a; . ./.env; set +a
 
 # 5. Schema ------------------------------------------------------------------
 log "تطبيق مخطط SQL"
-for f in 001_init_pgvector 002_functions 003_auth_rbac 004_assistant 005_portal_workspace; do
-    "$PY" scripts/apply_sql.py --file "sql/${f}.sql" >/dev/null 2>&1 \
-        || die "فشل تطبيق ${f}.sql"
-done
+"$PY" scripts/apply_sql.py >/dev/null 2>&1 \
+    || die "فشل تطبيق مخطط SQL"
 log "المخطط جاهز"
 
 # 6. Corpus ------------------------------------------------------------------

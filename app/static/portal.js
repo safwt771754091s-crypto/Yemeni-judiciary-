@@ -63,6 +63,17 @@
       api.setToken(data.access_token);
       return data;
     },
+    async signup(payload) {
+      const data = await api.call("/auth/signup", {
+        method: "POST",
+        body: payload,
+      });
+      api.setToken(data.access_token);
+      return data;
+    },
+    async signupOptions() {
+      return api.get("/auth/signup");
+    },
     logout() {
       api.setToken("");
       location.href = "/ui/index.html";

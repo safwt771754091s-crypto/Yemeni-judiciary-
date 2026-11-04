@@ -15,15 +15,19 @@ from typing import Any
 from fastapi import APIRouter, Depends, status
 
 from app.api.deps import AuthDep, CurrentUserDep, require_permission
+from app.core.config import settings
 from app.core.permissions import (
     ALL_PERMISSIONS,
     ROLE_LABELS_AR,
     ROLE_PERMISSIONS,
+    ROLE_PORTALS,
     Role,
 )
 from app.schemas.auth import (
     LoginRequest,
     PermissionCatalogue,
+    SignupRequest,
+    SignupResponse,
     TokenResponse,
     UserCreate,
     UserOut,
@@ -32,6 +36,50 @@ from app.schemas.auth import (
 )
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+@router.get(
+    "/signup",
+    summary="خيارات إنشاء الحساب الذاتي",
+    description="يعرض ما إذا كان التسجيل الذاتي متاحاً والأدوار التي يمكن اختيارها.",
+)
+async def signup_options() -> dict[str, Any]:
+    return {
+        "enabled": settings.allow_self_signup,
+        "default_role": settings.signup_default_role.value,
+        "roles": [
+            {
+                "role": role.value,
+                "label_ar": ROLE_LABELS_AR[role],
+                "portal": ROLE_PORTALS.get(role, {}).get("portal"),
+                "page": ROLE_PORTALS.get(role, {}).get("page"),
+            }
+            for role in settings.signup_roles
+        ],
+    }
+
+
+@router.post(
+    "/signup",
+    response_model=SignupResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="إنشاء حساب جديد (تسجيل ذاتي)",
+    description=(
+        "ينشئ حساباً جديداً ويعيد رمز دخول فوراً، على غرار منصات العمل القانوني. "
+        "الأدوار المتاحة هي البوابات المهنية فقط، ولا يمكن إنشاء حساب مالك أو مدير."
+    ),
+)
+async def signup(payload: SignupRequest, auth: AuthDep) -> SignupResponse:
+    created = await auth.register(payload.model_dump())
+    token, expires_in = auth.issue_token(created)
+    portal = ROLE_PORTALS.get(Role(created["role"]), {})
+    return SignupResponse(
+        access_token=token,
+        expires_in=expires_in,
+        user=UserOut(**{k: created[k] for k in UserOut.model_fields if k in created}),
+        role_portal=portal.get("portal"),
+        role_portal_page=portal.get("page"),
+    )
 
 
 @router.post(

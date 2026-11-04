@@ -8,7 +8,13 @@ from __future__ import annotations
 from typing import Any
 
 from app.core.config import settings
-from app.core.errors import ForbiddenError, NotFoundError, UnauthorizedError, ValidationError
+from app.core.errors import (
+    ConflictError,
+    ForbiddenError,
+    NotFoundError,
+    UnauthorizedError,
+    ValidationError,
+)
 from app.core.logging import get_logger
 from app.core.permissions import Role, has_permission, permissions_for
 from app.core.security import decode_token, encode_token, verify_password
@@ -104,6 +110,43 @@ class AuthService:
             raise ForbiddenError("هذا الحساب معطّل، يرجى مراجعة مالك المنصة")
         await self.users.touch_login(user["id"])
         return user
+
+    # -- self-service signup -----------------------------------------------
+    async def register(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Create an account from a public signup request.
+
+        Deliberately separate from :meth:`create_user`: signup has no actor, so
+        it can never inherit an admin's authority. The role is clamped to the
+        professional portals and the account always starts active as a viewer
+        or the chosen portal role - never owner, admin or editor.
+        """
+        if not settings.allow_self_signup:
+            raise ForbiddenError("التسجيل الذاتي غير مُفعَّل على هذه المنصة")
+
+        username = str(payload["username"]).strip()
+        email = payload.get("email")
+        requested = payload.get("role")
+        role = Role(requested) if requested else settings.signup_default_role
+        if role not in settings.signup_roles:
+            raise ForbiddenError("لا يمكن التسجيل بهذا الدور")
+
+        if await self.users.get_by_username(username) is not None:
+            raise ConflictError(f"اسم المستخدم «{username}» مستخدم بالفعل")
+        if email and await self.users.get_by_email(email) is not None:
+            raise ConflictError("هذا البريد الإلكتروني مسجَّل بالفعل")
+
+        created = await self.users.create(
+            username=username,
+            password=payload["password"],
+            role=role,
+            full_name=payload.get("full_name", ""),
+            email=email,
+        )
+        logger.info(
+            "self-service signup",
+            extra={"username": username, "role": role.value},
+        )
+        return created
 
     def issue_token(self, user: dict[str, Any]) -> tuple[str, int]:
         """Return ``(token, expires_in_seconds)`` for a user row."""

@@ -7,6 +7,8 @@ from typing import Literal
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.core.permissions import Role
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -103,6 +105,19 @@ class Settings(BaseSettings):
     owner_password: str = "Owner@Yemen2026"
     owner_email: str | None = None
     owner_full_name: str = "مالك المنصة"
+
+    # Self-service signup. Enabled by default so the platform can be tried
+    # without an operator; set ALLOW_SELF_SIGNUP=false to require an invitation.
+    # Signups may only pick from these roles - never owner, admin or editor.
+    allow_self_signup: bool = True
+    signup_default_role: Role = Role.VIEWER
+    signup_roles: list[Role] = [
+        Role.VIEWER,
+        Role.RESEARCHER,
+        Role.LAWYER,
+        Role.JUDGE,
+        Role.PROSECUTOR,
+    ]
 
     @field_validator("llm_api_key", "n8n_hmac_secret", "owner_email", mode="before")
     @classmethod
