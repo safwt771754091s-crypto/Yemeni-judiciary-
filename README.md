@@ -202,10 +202,22 @@ JSON
 
 ### 3.5 التشغيل
 
+شغّل الخادم **في الخلفية** مع توجيه المخرجات إلى ملف. لا تشغّله في المقدمة داخل
+أمر يجب أن يعود: فهو لا ينتهي أبداً، فيتعلّق الأمر حتى تُقتل المهلة.
+
 ```bash
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-# أو: make dev
+# شغّل في الخلفية وانتظر الجاهزية
+nohup .venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 \
+    > /tmp/uvicorn.log 2>&1 &
+# انتظر حتى يستجيب
+for _ in $(seq 1 30); do curl -sf -m 3 http://localhost:8000/api/v1/health/ready && break; sleep 1; done
+# أوقفه بالمعرّف عند الانتهاء
+pkill -f "uvicorn app.main:app"
 ```
+
+بدلاً من ذلك، استخدم `make serve` (Docker) أو `make deploy` (Postgres أصلي)، وكلاهما
+يشغّل الخادم في الخلفية ويعيد التحكم بعد التأكد من الجاهزية. أما `make dev` فيضيف
+`--reload` ويبقى في المقدمة — لا تستخدمه في أمر آلي.
 
 - التوثيق التفاعلي: http://localhost:8000/docs
 - ReDoc: http://localhost:8000/redoc
@@ -285,7 +297,7 @@ SUPABASE_DB_URL=postgresql://legal:legal@127.0.0.1:5433/legal_ai
 
 ```bash
 docker compose up -d --build       # API + Postgres/pgvector محلي
-docker compose logs -f api
+docker compose logs --tail=50 api  # لا تستخدم -f: المتابعة لا تنتهي أبداً
 curl -s localhost:8000/api/v1/health/ready   # يجب أن يكون status=ready
 ```
 

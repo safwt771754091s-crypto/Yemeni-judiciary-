@@ -9,7 +9,7 @@ help:
 install: ## Create venv and install all dependencies
 	python3 -m venv .venv && $(PIP) install --upgrade pip && $(PIP) install -r requirements-dev.txt
 
-dev: ## Run the API with autoreload
+dev: ## Run the API with autoreload (foreground: never returns)
 	$(PY) -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 run: ## Run the API (production-style)
