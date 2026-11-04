@@ -325,6 +325,19 @@ function renderFiles(){
 }
 function rmFile(i){ FILES.splice(i,1); renderFiles(); }
 function esc(s){ return String(s??"").replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+/* Yemeni statute titles are self-describing and already carry their number
+   («... رقم (14) لسنة 2002م»), while the stored law_number repeats it. Append it
+   only when the title does not already carry that same number, matching
+   format_law_title() on the server. */
+function lawLabel(title, num){
+  const t = (title || "").trim();
+  if(!t) return "قانون";
+  const n = (num || "").toString().trim();
+  if(!n) return t;
+  const western = t.replace(/[\u0660-\u0669\u06F0-\u06F9]/g, d => String(d.charCodeAt(0) & 0xF));
+  return new RegExp("\\(\\s*" + n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\s*\\)").test(western)
+    ? t : `${t} رقم (${n})`;
+}
 
 /* ---------- tabs ---------- */
 document.querySelectorAll(".tabs button").forEach(b=>{
@@ -477,7 +490,7 @@ function render(d){
     ? `<table><thead><tr><th>المادة</th><th>القانون</th><th>النص</th><th>الملاءمة</th></tr></thead><tbody>` +
       arts.map(a=>`<tr>
         <td><b>${esc(a.article_label)}</b></td>
-        <td>${esc(a.law_title)}${a.law_number?` (${esc(a.law_number)})`:""}</td>
+        <td>${esc(lawLabel(a.law_title, a.law_number))}</td>
         <td style="max-width:520px">${esc((a.content||"").slice(0,320))}${(a.content||"").length>320?"…":""}</td>
         <td><span class="pill ${a.verbatim?'ok':'warn'}">${(a.similarity??0).toFixed(2)}</span></td>
       </tr>`).join("") + `</tbody></table>`

@@ -235,3 +235,62 @@ def test_law_title_number_is_not_duplicated():
         format_law_title("قانون رقم (40) لسنة 2002م", "14")
         == "قانون رقم (40) لسنة 2002م رقم (14)"
     )
+
+
+def test_intake_ui_renders_law_number_once():
+    """The intake UI must apply the same rule as ``format_law_title``.
+
+    ``app/static/intake.html`` renders retrieved articles and used to print the
+    stored ``law_number`` in parentheses after a title that already carries it.
+    The helper is executed here (under node) against the real served file so the
+    two implementations cannot silently drift apart.
+    """
+    import json
+    import re
+    import shutil
+    import subprocess
+    from pathlib import Path
+
+    from app.core.text_utils import format_law_title
+
+    node = shutil.which("node")
+    if not node:
+        import pytest
+
+        pytest.skip("node is not installed")
+
+    html = (Path(__file__).resolve().parents[1] / "app" / "static" / "intake.html").read_text(
+        encoding="utf-8"
+    )
+    match = re.search(r"function lawLabel\(title, num\)\{.*?\n\}", html, re.S)
+    assert match, "intake.html must define the lawLabel helper"
+
+    cases = [
+        ("القانون المدني (قانون المعاملات المدنية) رقم (14) لسنة 2002م", "14"),
+        ("قانون رقم (٢١) بشأن الإثبات", "21"),
+        ("قانون رقم (١٤) لسنة 2002م", "14"),
+        ("القانون المدني اليمني", "14"),
+        ("القانون المدني اليمني", None),
+        ("قانون رقم (40) لسنة 2002م", "14"),
+        (None, "14"),
+        ("دستور الجمهورية اليمنية", None),
+    ]
+    script = (
+        match.group(0)
+        + "\nconsole.log(JSON.stringify("
+        + json.dumps(cases)
+        + ".map(([t,n])=>lawLabel(t,n))));"
+    )
+    out = subprocess.run(
+        [node, "-e", script], capture_output=True, text=True, timeout=30, check=True
+    )
+    ui_results = json.loads(out.stdout)
+
+    for (title, number), ui in zip(cases, ui_results, strict=True):
+        server = format_law_title(title, number)
+        assert ui == server, f"UI/server mismatch for {title!r}: {ui!r} != {server!r}"
+
+    # And the concrete regression: the number appears exactly once.
+    civil = "القانون المدني (قانون المعاملات المدنية) رقم (14) لسنة 2002م"
+    assert ui_results[0] == civil
+    assert ui_results[0].count("(14)") == 1
