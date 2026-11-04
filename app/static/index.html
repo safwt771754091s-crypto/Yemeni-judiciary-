@@ -66,6 +66,15 @@
   .spinner.on{display:block}
   .links a{color:var(--gold2);margin-inline-end:16px;font-size:13px;text-decoration:none}
   .links a:hover{text-decoration:underline}
+  #installBtn{background:linear-gradient(135deg,var(--gold),#a8823a);color:#12181f;border:0;
+    border-radius:9px;padding:10px 20px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit}
+  .install-modal{position:fixed;inset:0;z-index:80;display:flex;align-items:center;
+    justify-content:center;background:rgba(6,10,14,.72);padding:22px}
+  .install-modal .im-box{width:100%;max-width:460px;background:var(--panel);
+    border:1px solid var(--line);border-radius:16px;padding:24px}
+  .install-modal h3{margin:0 0 6px;color:var(--gold2);font-size:17px}
+  .install-modal ol{margin:12px 0 4px;padding-inline-start:22px;font-size:14px;line-height:2}
+  .install-modal .actions{display:flex;justify-content:flex-end;margin-top:14px}
 </style>
 </head>
 <body>
@@ -86,6 +95,9 @@
     <a href="/ui/prosecution.html">بوابة النيابة العامة</a>
     <a href="/ui/researcher.html">بوابة الباحث والطالب</a>
     <a href="/ui/assistant.html">المساعد القانوني الذكي</a>
+  </div>
+  <div style="margin-top:10px">
+    <button type="button" id="installBtn" style="display:none">📲 تثبيت التطبيق على الجوال</button>
   </div>
 </header>
 
@@ -296,13 +308,7 @@ function show(d){
 
 $('#clearBtn').onclick = () => { $('#results').style.display = 'none'; };
 loadStats();
-
-// تسجيل عامل الخدمة لتمكين تثبيت التطبيق والعمل دون اتصال (PWA).
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => undefined);
-  });
-}
 </script>
+<script src="/ui/install.js"></script>
 </body>
 </html>
