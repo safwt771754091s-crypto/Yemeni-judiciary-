@@ -1,4 +1,4 @@
-.PHONY: help install dev run serve seed sql test lint fmt docker-build docker-up clean
+.PHONY: help install dev run serve deploy seed sql test lint fmt docker-build docker-up clean
 
 PY ?= .venv/bin/python
 PIP ?= .venv/bin/pip
@@ -17,6 +17,9 @@ run: ## Run the API (production-style)
 
 serve: ## Bring up Docker + pgvector + corpus + API on PORT (default 12000)
 	PORT=$(PORT) ./scripts/serve_public.sh
+
+deploy: ## Native (no-Docker) deploy: Postgres + schema + corpus + API on PORT
+	PORT=$(PORT) ./scripts/deploy_native.sh
 
 seed: ## Ingest the bundled Yemeni legal corpus
 	$(PY) scripts/seed_corpus.py
