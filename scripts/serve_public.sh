@@ -30,27 +30,45 @@ fi
 log "Docker يعمل"
 
 # 2. pgvector ----------------------------------------------------------------
-if ! $DOCKER ps --format '{{.Names}}' | grep -q '^project-postgres-1$'; then
+# The container name is "<compose-project>-postgres-1", and the project name
+# follows the directory (or COMPOSE_PROJECT_NAME), so it is not safe to hardcode.
+# Resolve the postgres service by its Compose label instead.
+pg_container() {
+    $DOCKER ps -q -f label=com.docker.compose.service=postgres 2>/dev/null | head -n1
+}
+
+if [ -z "$(pg_container)" ]; then
     log "تشغيل قاعدة البيانات"
     $DOCKER compose up -d postgres >/dev/null 2>&1
 fi
 for _ in $(seq 1 30); do
-    $DOCKER exec project-postgres-1 pg_isready -U legal -d legal_ai >/dev/null 2>&1 && break
+    CID="$(pg_container)"
+    [ -n "$CID" ] && $DOCKER exec "$CID" pg_isready -U legal -d legal_ai >/dev/null 2>&1 && break
     sleep 1
 done
-$DOCKER exec project-postgres-1 pg_isready -U legal -d legal_ai >/dev/null 2>&1 \
+CID="$(pg_container)"
+[ -n "$CID" ] && $DOCKER exec "$CID" pg_isready -U legal -d legal_ai >/dev/null 2>&1 \
     || die "قاعدة البيانات لا تستجيب"
 log "قاعدة البيانات جاهزة"
 
+# The host port is whatever Compose published (5433 in docker-compose.yml, to
+# avoid clashing with a host Postgres). A stale .env may still point at 5432,
+# which would make the seed and the API fail to connect, so override it for the
+# processes this script launches.
+DB_PORT="$($DOCKER port "$CID" 5432/tcp 2>/dev/null | head -n1 | sed 's/.*://')"
+DB_PORT="${DB_PORT:-5433}"
+export SUPABASE_DB_URL="postgresql://legal:legal@127.0.0.1:${DB_PORT}/legal_ai"
+log "عنوان قاعدة البيانات: ${SUPABASE_DB_URL}"
+
 # 3. Corpus ------------------------------------------------------------------
 # The volume is recreated empty on every recycle, so seed whenever it is empty.
-COUNT=$($DOCKER exec project-postgres-1 psql -U legal -d legal_ai -tAc \
+COUNT=$($DOCKER exec "$CID" psql -U legal -d legal_ai -tAc \
     "select count(*) from legal_articles;" 2>/dev/null | tr -d '[:space:]')
 if [ "${COUNT:-0}" = "0" ]; then
     log "فهرسة المدوّنة القانونية (قد يستغرق دقيقة)"
     .venv/bin/python scripts/seed_corpus.py >/tmp/seed.log 2>&1 \
         || die "فشلت الفهرسة — راجع /tmp/seed.log"
-    COUNT=$($DOCKER exec project-postgres-1 psql -U legal -d legal_ai -tAc \
+    COUNT=$($DOCKER exec "$CID" psql -U legal -d legal_ai -tAc \
         "select count(*) from legal_articles;" 2>/dev/null | tr -d '[:space:]')
 fi
 log "المدوّنة القانونية: ${COUNT:-0} مادة"
