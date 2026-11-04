@@ -37,6 +37,14 @@ KEEP: dict[str, set[str]] = {
     # lacked, so a labour case retrieved nothing. Keep its opening articles so
     # the suite exercises that path.
     "labour_law": {str(n) for n in range(1, 21)},
+    # An administrative case (إداري) routes to the constitution, which the
+    # excerpt omitted, so that case type retrieved nothing from the fixture.
+    # Keep the provisions such a case turns on: judicial authority and the right
+    # to sue, the civil service, and the legality of administrative decisions.
+    "constitution": {
+        "28", "29", "41", "47", "48", "49", "51",
+        "119", "120", "144", "145", "146", "149", "150", "151", "153", "154",
+    },
 }
 
 def articles_of(text: str) -> dict[str, str]:
