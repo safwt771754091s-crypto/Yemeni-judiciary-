@@ -141,7 +141,7 @@ LABOUR = CaseTypeProfile(
 ADMINISTRATIVE = CaseTypeProfile(
     key="إداري",
     label_ar="إداري",
-    source_types=("constitution", "civil_procedure", "civil_law", "executive_regulation"),
+    source_types=("constitution", "civil_procedure", "civil_law"),
     strong=(
         "قرار إداري", "إلغاء قرار", "جهة إدارية", "الإدارة العامة", "موظف عام",
         "المحكمة الإدارية", "دعوى إدارية", "قرار تعيين", "قرار ترقية", "قرار نقل",

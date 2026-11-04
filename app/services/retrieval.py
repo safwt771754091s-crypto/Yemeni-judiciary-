@@ -20,7 +20,7 @@ import time
 from typing import Any
 
 from app.core.config import settings
-from app.core.legal_lexicon import profile_terms
+from app.core.legal_lexicon import CASE_TYPES, profile_terms, source_types_for
 from app.core.logging import get_logger
 from app.core.text_utils import extract_article_numbers, normalize_arabic
 from app.db import vector_store as vector_store_module
@@ -30,25 +30,19 @@ from app.schemas.legal import RetrievalQuery, RetrievedArticle
 
 logger = get_logger(__name__)
 
-# Default corpus for a civil/commercial case: the codes a Yemeni civil court
-# applies most often. Evidence law is always included because the reasoning
-# layer weighs proof.
+# Case type -> corpus the court searches. Derived from the lexicon, which is the
+# single source of truth for "which codes a judge applies to this kind of case":
+# the routing table used to be a hand-maintained copy, and it drifted - «تنفيذ»
+# was added to the lexicon but never mirrored here, so an execution case searched
+# the whole corpus unfiltered. Evidence law is always part of a profile because
+# the reasoning layer weighs proof.
 DEFAULT_SOURCE_TYPES: dict[str, list[str]] = {
-    "مدني": ["civil_law", "evidence_law", "civil_procedure"],
-    "تجاري": ["commercial_law", "civil_law", "evidence_law", "civil_procedure"],
-    "عقاري": ["civil_law", "evidence_law", "civil_procedure"],
-    "عمالي": ["labour_law", "civil_law", "evidence_law", "civil_procedure"],
-    "أسري": ["family_law", "evidence_law", "civil_procedure"],
-    "جزائي": ["criminal_law", "criminal_procedure", "evidence_law"],
-    "جنائي": ["criminal_law", "criminal_procedure", "evidence_law"],
-    "إداري": ["constitution", "civil_procedure", "civil_law"],
+    profile.key: list(profile.source_types) for profile in CASE_TYPES
 }
 
 
 def sources_for_case_type(case_type: str | None) -> list[str] | None:
-    if not case_type:
-        return None
-    return DEFAULT_SOURCE_TYPES.get(case_type.strip())
+    return source_types_for(case_type)
 
 
 def law_priority(source_types: list[str] | None) -> dict[str, int]:

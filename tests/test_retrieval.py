@@ -302,3 +302,63 @@ async def test_labour_case_retrieves_the_labour_code(seeded_store):
     assert any(r.source_type.value == "labour_law" for r in results), (
         "the labour code must be present in the labour case results"
     )
+
+
+# --------------------------------------------------------------------------- #
+# Routing coverage: every branch the classifier can emit must have a corpus
+# --------------------------------------------------------------------------- #
+def test_every_classifier_case_type_has_routing():
+    """Every case type the classifier can return must map to a corpus.
+
+    Regression: the routing table in ``retrieval.py`` was a hand-maintained copy
+    of the lexicon's ``source_types`` and drifted. «تنفيذ» was added to the
+    lexicon but never mirrored in the routing table, so an execution case
+    classified as «تنفيذ» got ``None`` back and searched the whole corpus
+    unfiltered instead of the execution codes.
+    """
+    from app.core.legal_lexicon import CASE_TYPES
+
+    unrouted = [profile.key for profile in CASE_TYPES if not sources_for_case_type(profile.key)]
+    assert not unrouted, f"case types with no routing: {unrouted}"
+
+
+def test_routing_table_agrees_with_the_lexicon():
+    """The routing table and the lexicon must name the same codes per branch.
+
+    Both the intake classifier and the retrieval planner read the lexicon, so
+    the routing table is now derived from it. This guards against the two
+    drifting apart again.
+    """
+    from app.core.legal_lexicon import CASE_TYPES
+
+    for profile in CASE_TYPES:
+        assert sources_for_case_type(profile.key) == list(profile.source_types), (
+            f"routing for «{profile.key}» diverged from the lexicon"
+        )
+
+
+def test_routing_resolves_aliases():
+    """A spelling variant of a case type routes to the same corpus."""
+    assert sources_for_case_type("جزائي") == sources_for_case_type("جنائي")
+    assert sources_for_case_type("جزائي") is not None
+
+
+async def test_execution_case_retrieves_the_execution_codes(seeded_store):
+    """An execution case (تنفيذ) must be filtered to its codes, not left open."""
+    results, _ = await retrieval_service.retrieve_for_case(
+        case={
+            "case_type": "تنفيذ",
+            "subject_matter": "تنفيذ حكم وإجراء الحجز على أموال المدين",
+            "facts_summary": "صدر حكم واجب النفاذ وامتنع المحكوم عليه عن تنفيذه.",
+            "plaintiff_claims": [
+                {"title": "الحجز", "description": "إجراء الحجز على أموال المدين تنفيذاً للحكم"}
+            ],
+            "defendant_responses": [],
+        },
+        top_k=8,
+        case_type="تنفيذ",
+    )
+    assert results, "an execution case must retrieve at least one article"
+    allowed = set(DEFAULT_SOURCE_TYPES["تنفيذ"])
+    for article in results:
+        assert article.source_type.value in allowed
