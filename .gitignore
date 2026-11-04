@@ -19,3 +19,7 @@ build/
 
 # Agent working memory (local only)
 .openhands/
+
+# local env backups (may contain secrets)
+.env.bak*
+.env.*.bak
