@@ -18,6 +18,7 @@ from app.core.config import settings
 from app.core.errors import GroundingError
 from app.core.logging import get_logger
 from app.core.money import DEFAULT_CURRENCY, format_money
+from app.core.text_utils import format_law_title
 from app.llm.chains import build_judgment_chain, build_reasoning_blocks
 from app.llm.prompts import build_commercial_block
 from app.llm.validator import GroundingReport, strip_unverified_reasoning, validate_citations
@@ -350,9 +351,7 @@ def render_markdown(envelope: JudgmentDraftEnvelope, case: dict[str, Any] | None
         lines.append("**النصوص القانونية المستند إليها:**")
         lines.append("")
         for citation in r.cited_articles:
-            law = citation.law_title
-            if citation.law_number:
-                law = f"{law} رقم ({citation.law_number})"
+            law = format_law_title(citation.law_title, citation.law_number)
             lines.append(f"- **{citation.article_label}** من {law} — {citation.relevance}")
             if citation.quote:
                 lines.append(f"  > «{citation.quote.strip()[:600]}»")

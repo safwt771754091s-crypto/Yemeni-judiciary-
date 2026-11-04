@@ -15,6 +15,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.core.config import settings
+from app.core.text_utils import format_law_title
 
 GROUNDING_CONTRACT = """
 قواعد إلزامية غير قابلة للتفاوض:
@@ -167,9 +168,7 @@ def build_retrieved_statutes_block(articles: list[dict]) -> str:
         return "«النصوص القانونية المسترجعة»: (لا توجد نصوص قانونية مطابقة في قاعدة البيانات)"
     lines = ["«النصوص القانونية المسترجعة» (لا يجوز الاستشهاد بغيرها):", ""]
     for index, article in enumerate(articles, start=1):
-        law = article.get("law_title") or "قانون"
-        if article.get("law_number"):
-            law = f"{law} رقم ({article['law_number']})"
+        law = format_law_title(article.get("law_title"), article.get("law_number"))
         lines.append(f"[{index}] {article.get('article_label') or 'مادة'} من {law}")
         if article.get("chapter"):
             lines.append(f"    الباب/الفصل: {article['chapter']}")
