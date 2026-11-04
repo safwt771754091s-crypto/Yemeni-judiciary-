@@ -358,6 +358,18 @@ class RetrievalService:
         if focused:
             queries.append(focused)
         queries.append(base)
+
+        # The case type's statutory queries are the deterministic signal that
+        # surfaces the code the case is decided on, so they go in ahead of the
+        # model's expansion queries. The model is asked for up to six queries,
+        # and appending the statutory ones after those pushed them past the cap
+        # below: whenever the model filled the budget, an administrative case
+        # kept none of its governing provisions and fell back to the generic
+        # civil-procedure articles the fix exists to outrank.
+        for extra in self._commercial_queries(case) + self._administrative_queries(case):
+            if extra not in queries:
+                queries.append(extra)
+
         try:
             result = await self._expansion_chain.run(
                 [
@@ -372,14 +384,10 @@ class RetrievalService:
         except Exception as exc:
             logger.warning("query expansion failed", extra={"error": str(exc)})
 
+        # Cited numbers are also pinned by exact lookup in `retrieve_for_case`,
+        # so they are the cheapest queries to drop when the budget runs out.
         for article in extract_article_numbers(base)[:5]:
             queries.append(f"المادة {article}")
-        for extra in self._commercial_queries(case):
-            if extra not in queries:
-                queries.append(extra)
-        for extra in self._administrative_queries(case):
-            if extra not in queries:
-                queries.append(extra)
         return queries[:10]
 
     @staticmethod

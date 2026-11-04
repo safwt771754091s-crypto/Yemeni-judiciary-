@@ -98,6 +98,70 @@ async def test_administrative_plan_queries_cover_the_governing_provisions():
         )
 
 
+class _FixedExpansion:
+    """Expansion chain stub that returns a caller-supplied query list."""
+
+    def __init__(self, queries: list[str]) -> None:
+        self._queries = queries
+
+    async def run(self, _messages: object) -> SimpleNamespace:
+        return SimpleNamespace(data={"queries": list(self._queries)})
+
+
+async def test_administrative_queries_survive_a_full_model_budget(monkeypatch):
+    """The model must not be able to crowd the statutory queries out of the plan.
+
+    The expansion prompt asks for up to six queries and the plan is capped at
+    ten. Appended after the model's output, a full budget pushed the statutory
+    queries past the cap, so an administrative case kept none of them and fell
+    back to the generic civil-procedure articles this module exists to outrank.
+    """
+    monkeypatch.setattr(
+        retrieval_service,
+        "_expansion_chain",
+        _FixedExpansion([f"الالتزامات والعقود والتعويض {i}" for i in range(6)]),
+    )
+
+    queries = await retrieval_service.plan_queries(ADMIN_CASE)
+    for term in ("حق التقاضي", "الوظيفة العامة", "اللوائح الإدارية"):
+        assert any(term in query for query in queries), (
+            f"a full model budget must not drop {term!r}; got {' | '.join(queries)}"
+        )
+
+
+async def test_administrative_case_retrieves_constitution_despite_a_full_budget(monkeypatch):
+    """A full model budget must not undo the retrieval fix end to end.
+
+    The civil law is seeded alongside the two routed codes because it is the
+    code the degraded plan falls back to; without it in the corpus the assertion
+    below cannot tell the two plans apart.
+    """
+    monkeypatch.setattr(
+        retrieval_service,
+        "_expansion_chain",
+        _FixedExpansion([f"الالتزامات والعقود والتعويض {i}" for i in range(6)]),
+    )
+    payload = json.loads(CORPUS.read_text(encoding="utf-8"))
+    for entry in payload["documents"]:
+        if entry["document"]["source_type"] in {"constitution", "civil_procedure", "civil_law"}:
+            await ingestion_service.ingest_text(
+                IngestTextRequest(
+                    document=LegalDocumentCreate(**entry["document"]),
+                    text=entry["text"],
+                )
+            )
+
+    results, _ = await retrieval_service.retrieve_for_case(
+        case=ADMIN_CASE, top_k=8, case_type="إداري"
+    )
+    types = [r.source_type.value for r in results]
+    assert len([t for t in types[:3] if t == "constitution"]) >= 2, (
+        "the constitution must not merely appear in an administrative case's "
+        "results but dominate its top three; a full model budget left only the "
+        f"least specific statutory queries in the plan and produced {types}"
+    )
+
+
 def test_administrative_relevance_only_boosts_administrative_cases():
     """The administrative signal must be inert for every other case type."""
     article = SimpleNamespace(
