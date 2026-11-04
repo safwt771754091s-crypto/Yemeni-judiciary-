@@ -11,7 +11,7 @@
  *
  * Bump CACHE_VERSION whenever the shell changes to retire the old cache.
  */
-const CACHE_VERSION = "yemen-legal-v2";
+const CACHE_VERSION = "yemen-legal-v3";
 const SHELL_CACHE = `${CACHE_VERSION}-shell`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 
@@ -19,6 +19,7 @@ const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 const APP_SHELL = [
   "/",
   "/manifest.json",
+  "/ui/landing.html",
   "/ui/index.html",
   "/ui/admin.html",
   "/ui/judge.html",
@@ -26,11 +27,15 @@ const APP_SHELL = [
   "/ui/prosecution.html",
   "/ui/researcher.html",
   "/ui/assistant.html",
+  "/ui/workspace.html",
+  "/ui/install.html",
   "/ui/offline.html",
   "/ui/install.js",
   "/ui/portal.css",
   "/ui/portal.js",
   "/ui/portal-app.js",
+  "/ui/workspace.css",
+  "/ui/workspace.js",
   "/ui/icons/icon-192.png",
   "/ui/icons/icon-512.png",
   "/ui/icons/icon-maskable-512.png",

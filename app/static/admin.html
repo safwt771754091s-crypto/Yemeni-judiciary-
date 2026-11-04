@@ -105,6 +105,7 @@
       <button data-tab="users">المستخدمون والصلاحيات</button>
       <button data-tab="roles">الأدوار</button>
       <button data-tab="monitor">مراقبة النظام</button>
+      <button data-tab="backup">النسخة الاحتياطية</button>
     </div>
 
     <!-- الأقسام -->
@@ -222,6 +223,40 @@
           <div style="display:flex;align-items:flex-end"><button id="monReload">تحديث</button></div>
         </div>
         <table id="monTable"></table>
+      </div>
+    </section>
+
+    <!-- النسخة الاحتياطية -->
+    <section id="tab-backup" class="hidden">
+      <div class="card">
+        <h2>النسخة الاحتياطية والاستعادة</h2>
+        <div class="muted" style="margin-bottom:12px">
+          تصدّر نسخة كاملة من القضايا والمستخدمين والمحادثات وعناصر العمل في ملف JSON واحد،
+          أو استعدها لاحقاً. القوانين (المدونة) أصل مُصدَّر من المستودع ولا تُنسخ داخل النسخة.
+        </div>
+        <div id="bkSummary" class="muted">جارٍ التحميل…</div>
+        <div style="display:flex;gap:9px;flex-wrap:wrap;margin-top:14px">
+          <button id="bkExport">⬇ تنزيل نسخة احتياطية</button>
+          <label class="muted" style="display:flex;align-items:center;gap:6px;margin:0">
+            <input type="checkbox" id="bkCreds" checked style="width:auto"> تضمين بصمات كلمات المرور
+          </label>
+        </div>
+      </div>
+      <div class="card">
+        <h2>استعادة من ملف</h2>
+        <div class="row">
+          <div><label>ملف النسخة الاحتياطية (JSON)</label><input type="file" id="bkFile" accept="application/json,.json"></div>
+          <div style="display:flex;align-items:flex-end;gap:9px">
+            <label class="muted" style="display:flex;align-items:center;gap:6px;margin:0">
+              <input type="checkbox" id="bkReplace" style="width:auto"> استبدال كامل (حذف الحالي)
+            </label>
+          </div>
+        </div>
+        <div style="display:flex;gap:9px;flex-wrap:wrap;margin-top:14px">
+          <button id="bkDryRun" class="ghost">فحص فقط (دون كتابة)</button>
+          <button id="bkRestore" class="ghost">استعادة النسخة</button>
+        </div>
+        <div id="bkResult" style="margin-top:14px"></div>
       </div>
     </section>
   </div>
@@ -420,10 +455,11 @@ async function loadRoles(){
 
 // --- التبويبات ---
 function showTab(name){
-  ['sections','laws','articles','users','roles','monitor'].forEach(t =>
+  ['sections','laws','articles','users','roles','monitor','backup'].forEach(t =>
     $('#tab-' + t).classList.toggle('hidden', t !== name));
   document.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab===name));
   if (name === 'monitor') loadMonitor();
+  if (name === 'backup') loadBackup();
 }
 document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => showTab(b.dataset.tab));
 
@@ -466,6 +502,74 @@ $('#aLoad').onclick = loadArticles;
 $('#nuAdd').onclick = addUser;
 $('#monReload').onclick = loadMonitor;
 $('#monEntity').onchange = loadAudit;
+$('#bkExport').onclick = exportBackup;
+$('#bkDryRun').onclick = () => restoreBackup(true);
+$('#bkRestore').onclick = () => restoreBackup(false);
+
+// --- النسخة الاحتياطية ---
+async function loadBackup(){
+  try{
+    const s = await api('/backup/summary');
+    const c = s.counts || {};
+    $('#bkSummary').innerHTML =
+      `<span class="pill admin">${esc(s.app_name||'')}</span>
+       <span class="muted">قاعدة البيانات: ${s.database ? 'متصلة' : 'محلية'} ·
+       المدونة: ${esc(s.corpus_version||'—')} · أُنشئت: ${esc((s.created_at||'').toString().replace('T',' ').slice(0,19))}</span>
+       <div style="margin-top:10px">
+         <b>${c.users||0}</b> مستخدم · <b>${c.sections||0}</b> قسم ·
+         <b>${c.cases||0}</b> قضية · <b>${c.evidence||0}</b> دليل ·
+         <b>${c.judgments||0}</b> مسودة · <b>${c.assistant_conversations||0}</b> محادثة ·
+         <b>${c.workspace_items||0}</b> عنصر عمل · <b>${c.audit||0}</b> حدث
+       </div>`;
+  }catch(e){ $('#bkSummary').innerHTML = `<span class="muted">${esc(e.message)}</span>`; }
+}
+
+async function exportBackup(){
+  const creds = $('#bkCreds').checked;
+  $('#bkExport').disabled = true;
+  try{
+    const res = await fetch('/api/v1/backup/export?include_credentials=' + (creds?'true':'false'),
+      {headers: TOKEN ? {Authorization:'Bearer ' + TOKEN} : {}});
+    if (!res.ok) throw new Error('فشل التصدير (' + res.status + ')');
+    const blob = await res.blob();
+    const cd = res.headers.get('content-disposition') || '';
+    const m = cd.match(/filename="?([^"]+)"?/);
+    const name = m ? m[1] : 'yemen-legal-backup.json';
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+    msg('تم تنزيل النسخة الاحتياطية');
+  }catch(e){ msg(e.message, 'err'); }
+  finally{ $('#bkExport').disabled = false; }
+}
+
+async function restoreBackup(dryRun){
+  const file = $('#bkFile').files[0];
+  if (!file) return msg('اختر ملف النسخة الاحتياطية أولاً', 'err');
+  if (!dryRun && !confirm('استعادة النسخة؟' + ($('#bkReplace').checked ? ' سيتم حذف البيانات الحالية أولاً.' : ''))) return;
+  const btn = dryRun ? $('#bkDryRun') : $('#bkRestore');
+  btn.disabled = true;
+  try{
+    const text = await file.text();
+    const snapshot = JSON.parse(text);
+    const result = await api('/backup/restore', {method:'POST', body: JSON.stringify({
+      snapshot, replace: $('#bkReplace').checked, dry_run: dryRun, include_credentials: true,
+    })});
+    const r = result.restored || {};
+    $('#bkResult').innerHTML =
+      `<div class="card" style="margin:0"><h2>${dryRun ? 'نتيجة الفحص (دون كتابة)' : 'تمت الاستعادة'}</h2>
+        <div>${dryRun ? 'سيتم استيراد:' : 'تم استيراد:'}
+          <b>${r.users||0}</b> مستخدم · <b>${r.cases||0}</b> قضية ·
+          <b>${r.judgments||0}</b> مسودة · <b>${r.assistant_conversations||0}</b> محادثة ·
+          <b>${r.workspace_items||0}</b> عنصر عمل</div>
+        ${(result.warnings||[]).length ? '<div class="muted" style="margin-top:8px">تنبيهات: ' + result.warnings.map(esc).join(' · ') + '</div>' : ''}
+      </div>`;
+    msg(dryRun ? 'الفحص مكتمل' : 'تمت الاستعادة بنجاح');
+    if (!dryRun) await loadBackup();
+  }catch(e){ msg(e.message, 'err'); }
+  finally{ btn.disabled = false; }
+}
 
 if (TOKEN) start().catch(() => logout());
 </script>

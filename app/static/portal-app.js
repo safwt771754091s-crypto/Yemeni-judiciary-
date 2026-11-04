@@ -214,6 +214,10 @@
     home.textContent = "الرئيسية";
     home.onclick = () => { location.href = "/ui/index.html"; };
     nav.appendChild(home);
+    const workspace = document.createElement("button");
+    workspace.textContent = "مساحة العمل";
+    workspace.onclick = () => { location.href = "/ui/workspace.html"; };
+    nav.appendChild(workspace);
   }
 
   function renderOverview() {

@@ -109,6 +109,8 @@ PERMISSIONS: frozenset[str] = frozenset(
         "research.read",           # البحث في السوابق والمواد الدستورية
         # AI legal assistant (المساعد القانوني الذكي)
         "assistant.use",
+        # Backup and restore (النسخة الاحتياطية)
+        "backup.manage",
     }
 )
 
@@ -148,6 +150,7 @@ ROLE_PERMISSIONS: dict[Role, frozenset[str]] = {
             "judgments.read",
             "judgments.approve",
             "assistant.use",
+            "backup.manage",
         }
     ),
     Role.EDITOR: frozenset(

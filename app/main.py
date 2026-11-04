@@ -131,9 +131,12 @@ def create_app() -> FastAPI:
 
     @app.get("/", tags=["root"], summary="واجهة المنصة")
     async def root():
-        index = static_dir / "index.html"
-        if index.is_file():
-            return FileResponse(str(index))
+        # The public landing page is the front door; the judgment generator
+        # stays available at /ui/index.html for existing links.
+        for name in ("landing.html", "index.html"):
+            page = static_dir / name
+            if page.is_file():
+                return FileResponse(str(page))
         return {
             "name": settings.app_name,
             "version": "1.0.0",

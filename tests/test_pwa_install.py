@@ -18,12 +18,15 @@ STATIC = Path(__file__).resolve().parents[1] / "app" / "static"
 
 #: Every page that must offer "install the app".
 INSTALL_PAGES = [
+    "landing.html",
     "index.html",
     "judge.html",
     "lawyer.html",
     "prosecution.html",
     "researcher.html",
     "assistant.html",
+    "workspace.html",
+    "install.html",
     "admin.html",
     "intake.html",
 ]
@@ -68,6 +71,22 @@ def test_manifest_icons_exist_on_disk() -> None:
         assert path.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n", f"{rel} is not a PNG"
 
 
+def test_manifest_screenshots_exist_on_disk() -> None:
+    """Chrome's richer install UI shows screenshots; each must be a real PNG."""
+    manifest = json.loads((STATIC / "manifest.json").read_text(encoding="utf-8"))
+    shots = manifest.get("screenshots") or []
+    assert shots, "the manifest should declare at least one screenshot"
+    form_factors = set()
+    for shot in shots:
+        rel = shot["src"].replace("/ui/", "")
+        path = STATIC / rel
+        assert path.is_file(), f"missing screenshot {shot['src']}"
+        assert path.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n", f"{rel} is not a PNG"
+        form_factors.add(shot.get("form_factor"))
+    # Both form factors let the install UI show a correct preview per device.
+    assert {"wide", "narrow"} <= form_factors
+
+
 # --------------------------------------------------------------------------- #
 # Install runtime
 # --------------------------------------------------------------------------- #
@@ -96,13 +115,16 @@ def test_every_page_loads_the_install_runtime(page: str) -> None:
 @pytest.mark.parametrize("page", INSTALL_PAGES)
 def test_every_page_has_an_install_button(page: str) -> None:
     html = (STATIC / page).read_text(encoding="utf-8")
-    # Static pages carry the button in markup; the role portals render their
-    # shell (including the button) from portal-app.js, so accept either.
-    has_static = 'id="installBtn"' in html
-    renders_from_shell = "/ui/portal-app.js" in html and 'id="installBtn"' in (
-        STATIC / "portal-app.js"
-    ).read_text(encoding="utf-8")
-    assert has_static or renders_from_shell, f"{page} has no install button"
+    # Static pages carry the button in markup; the portals and the workspace
+    # render their shell (including the button) from a script, so accept either.
+    if 'id="installBtn"' in html:
+        return
+    scripts = [src for src in ("portal-app.js", "workspace.js") if "/ui/" + src in html]
+    assert scripts, f"{page} has no install button and loads no shell script"
+    for src in scripts:
+        assert 'id="installBtn"' in (STATIC / src).read_text(encoding="utf-8"), (
+            f"{page} renders its shell from {src}, which has no install button"
+        )
 
 
 def test_service_worker_caches_the_install_runtime() -> None:
@@ -115,8 +137,9 @@ def test_service_worker_caches_the_install_runtime() -> None:
 # --------------------------------------------------------------------------- #
 @pytest.mark.parametrize(
     "path",
-    ["/manifest.json", "/sw.js", "/ui/install.js", "/ui/icons/icon-192.png",
-     "/ui/icons/icon-512.png", "/ui/icons/icon-maskable-512.png"],
+    ["/manifest.json", "/sw.js", "/ui/install.js", "/ui/install.html",
+     "/ui/icons/icon-192.png", "/ui/icons/icon-512.png", "/ui/icons/icon-maskable-512.png",
+     "/ui/icons/screenshot-wide.png", "/ui/icons/screenshot-mobile.png"],
 )
 async def test_install_assets_are_served(client: httpx.AsyncClient, path: str) -> None:
     response = await client.get(path)
