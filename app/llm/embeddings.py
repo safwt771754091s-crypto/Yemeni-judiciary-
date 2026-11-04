@@ -10,6 +10,7 @@
 """
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import itertools
 import math
@@ -20,6 +21,7 @@ from app.core.config import settings
 from app.core.errors import LLMError
 from app.core.logging import get_logger
 from app.core.text_utils import normalize_arabic
+from app.llm.retry import is_retryable, retry_delay
 
 logger = get_logger(__name__)
 
@@ -81,19 +83,39 @@ class OpenAIEmbeddingProvider:
         self.model = settings.embedding_model
         self.dim = settings.embedding_dim
 
+    async def _embed_batch(self, texts: Sequence[str]) -> list[list[float]]:
+        """One embedding request, retried on transient provider failures.
+
+        Re-indexing issues one request per batch, so a rate-limited provider
+        would otherwise abandon the run midway and leave the corpus partially
+        embedded - vectors that silently belong to a different model.
+        """
+        last_exc: Exception | None = None
+        for attempt in range(settings.llm_max_retries + 1):
+            try:
+                response = await self._client.embeddings.create(
+                    model=self.model, input=list(texts), dimensions=self.dim
+                )
+                return [item.embedding for item in response.data]
+            except Exception as exc:
+                last_exc = exc
+                if attempt >= settings.llm_max_retries or not is_retryable(exc):
+                    break
+                delay = retry_delay(exc, attempt)
+                logger.warning(
+                    "transient embedding failure, retrying",
+                    extra={"attempt": attempt + 1, "delay": delay, "error": str(exc)[:200]},
+                )
+                await asyncio.sleep(delay)
+        raise LLMError("فشل توليد المتجهات (embeddings)", details=str(last_exc)) from last_exc
+
     async def embed_documents(self, texts: Sequence[str]) -> list[list[float]]:
         if not texts:
             return []
-        try:
-            response = await self._client.embeddings.create(
-                model=self.model, input=list(texts), dimensions=self.dim
-            )
-        except Exception as exc:
-            raise LLMError("فشل توليد المتجهات (embeddings)", details=str(exc)) from exc
-        return [item.embedding for item in response.data]
+        return await self._embed_batch(texts)
 
     async def embed_query(self, text: str) -> list[float]:
-        return (await self.embed_documents([text]))[0]
+        return (await self._embed_batch([text]))[0]
 
 
 def build_embedding_provider() -> EmbeddingProvider:

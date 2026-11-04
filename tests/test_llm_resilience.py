@@ -101,3 +101,87 @@ async def test_mock_judgment_is_grounded_in_the_rendered_case_block():
     for item in data["verdict"]["items"]:
         assert item["legal_basis"], item
         assert all(basis == "المادة (146)" for basis in item["legal_basis"]), item
+
+
+@pytest.mark.asyncio
+async def test_embedding_provider_retries_a_rate_limited_batch(monkeypatch):
+    """Re-indexing must survive a free-tier 429 instead of dying mid-corpus.
+
+    A partial corpus is worse than a failed run: half the rows would carry
+    vectors from a different model, and cosine search would silently degrade.
+    """
+    from app.llm import embeddings as embeddings_module
+
+    class _RateLimited(Exception):
+        pass
+
+    class _Resp:
+        def __init__(self, n: int) -> None:
+            self.data = [type("D", (), {"embedding": [0.1] * 4})() for _ in range(n)]
+
+    class _Embeddings:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def create(self, **_kwargs):
+            self.calls += 1
+            if self.calls == 1:
+                raise _RateLimited("Error code: 429 - quota exceeded, please retry in 1s")
+            return _Resp(2)
+
+    class _Client:
+        def __init__(self) -> None:
+            self.embeddings = _Embeddings()
+
+    provider = embeddings_module.OpenAIEmbeddingProvider.__new__(
+        embeddings_module.OpenAIEmbeddingProvider
+    )
+    provider.model = "test-embedding"
+    provider.dim = 4
+    provider._client = _Client()
+    monkeypatch.setattr(embeddings_module.settings, "llm_retry_base_delay_seconds", 0.01)
+
+    vectors = await provider.embed_documents(["نص أول", "نص ثان"])
+    assert provider._client.embeddings.calls == 2
+    assert len(vectors) == 2
+
+
+def test_chain_injects_output_schema_into_the_request():
+    """The model must be told the exact JSON keys, in English.
+
+    A hosted model that follows the Arabic instructions literally returns
+    Arabic keys ("الديباجة") that the English schema cannot read; the draft
+    then silently degrades to empty fallbacks with a grounding score of zero.
+    """
+    from app.llm.chains import LegalChain
+    from app.llm.outputs import QueryExpansionOutput
+
+    chain = LegalChain(
+        name="t", system_prompt="s", output_model=QueryExpansionOutput
+    )
+    block = chain._schema_block()
+    assert "queries" in block
+    assert "أسماء المفاتيح" in block or "الإلزامي" in block
+
+
+@pytest.mark.asyncio
+async def test_chain_sends_the_schema_block_to_the_provider():
+    """The schema must reach the provider payload, not just exist as a method."""
+    from app.llm.chains import LegalChain
+    from app.llm.outputs import QueryExpansionOutput
+
+    seen: dict[str, str] = {}
+
+    class _Recorder:
+        name = "recorder"
+        model = "recorder"
+
+        async def complete(self, *, system, messages, **_kwargs):
+            seen["prompt"] = "\n".join(m.content for m in messages)
+            return Completion(text='{"queries": ["x"]}', data={"queries": ["x"]}, model=self.model, provider=self.name)
+
+    chain = LegalChain(
+        name="t", system_prompt="s", output_model=QueryExpansionOutput, provider=_Recorder()
+    )
+    await chain.run(["body"])
+    assert "queries" in seen["prompt"]

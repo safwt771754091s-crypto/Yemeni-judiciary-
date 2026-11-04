@@ -12,7 +12,6 @@ paths produce identical message content.
 from __future__ import annotations
 
 import asyncio
-import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
@@ -22,6 +21,14 @@ from pydantic import BaseModel, ValidationError
 from app.core.config import settings
 from app.core.errors import LLMError
 from app.core.logging import get_logger
+from app.llm.outputs import (
+    AssistantOutput,
+    ClassificationOutput,
+    DraftOutput,
+    EvidenceAnalysisOutput,
+    QueryExpansionOutput,
+    ReasoningOutput,
+)
 from app.llm.prompts import (
     ASSISTANT_SYSTEM_PROMPT,
     CLASSIFICATION_PROMPT,
@@ -35,6 +42,8 @@ from app.llm.prompts import (
     build_retrieved_statutes_block,
 )
 from app.llm.provider import ChatMessage, Completion, LLMProvider, llm_provider
+from app.llm.retry import error_text, is_retryable, retry_delay
+from app.schemas.judgment import JudgmentDraft
 
 logger = get_logger(__name__)
 
@@ -43,56 +52,51 @@ class _ChainOutput(BaseModel):
     """Marker base class for chain outputs."""
 
 
-#: Provider errors that a retry can plausibly fix (rate limits, timeouts, 5xx).
-_RETRYABLE_RE = re.compile(
-    r"\b(timeout|timed out|temporarily|overloaded|unavailable|too many requests|"
-    r"rate.?limit|free.?limit|connection reset|retry)\b",
-    re.IGNORECASE,
-)
-_STATUS_RE = re.compile(
-    r"(?:error\s+code|status(?:\s+code)?|http)[:\s]*(\d{3})", re.IGNORECASE
-)
-#: HTTP statuses worth retrying: rate limits, request timeout, and any 5xx.
-#: 402 is included because free-tier providers report a resetting quota as
-#: "Payment Required" (e.g. "free limit reached, retry after 45s").
-_RETRYABLE_STATUSES = frozenset({402, 408, 409, 425, 429})
-#: "Retry after 26s" / "retry_after: 26" - honour the provider's own delay.
-_RETRY_AFTER_RE = re.compile(r"retry[_ ]after[\"':\s]+(\d+(?:\.\d+)?)", re.IGNORECASE)
+# The retry policy is shared with the embedding provider; these aliases keep the
+# existing chain call sites (and tests) working.
+_error_text = error_text
+_is_retryable = is_retryable
+_retry_delay = retry_delay
 
 
-def _error_text(exc: Exception) -> str:
-    """Message plus details: the status code and "retry after" hint live in details."""
-    details = getattr(exc, "details", None)
-    return f"{exc} {details}" if details else str(exc)
+def _resolve_ref(root: dict[str, Any], spec: dict[str, Any]) -> dict[str, Any]:
+    """Follow a Pydantic ``$ref`` into ``$defs`` so nested shapes can be rendered."""
+    ref = spec.get("$ref")
+    if isinstance(ref, str) and ref.startswith("#/$defs/"):
+        return root.get("$defs", {}).get(ref.rsplit("/", 1)[-1], {})
+    return spec
 
 
-def _is_retryable(exc: Exception) -> bool:
-    """True for a transient failure.
-
-    An explicit HTTP status decides it when present, so a client error (400)
-    that happens to mention "rate limit" in its body is not retried. Only when
-    no status is available do the keyword heuristics apply.
-    """
-    text = _error_text(exc)
-    match = _STATUS_RE.search(text)
-    if match:
-        code = int(match.group(1))
-        if 400 <= code < 500:
-            return code in _RETRYABLE_STATUSES
-        if code >= 500:
-            return True
-    return bool(_RETRYABLE_RE.search(text))
-
-
-def _retry_delay(exc: Exception, attempt: int) -> float:
-    """Backoff for a transient failure, respecting a provider "retry after" hint."""
-    match = _RETRY_AFTER_RE.search(_error_text(exc))
-    if match:
-        return min(float(match.group(1)) + 1.0, settings.llm_retry_max_delay_seconds)
-    return min(
-        settings.llm_retry_base_delay_seconds * (2**attempt),
-        settings.llm_retry_max_delay_seconds,
+def _type_hint(root: dict[str, Any], spec: dict[str, Any]) -> str:
+    spec = _resolve_ref(root, spec)
+    if "anyOf" in spec:
+        options = [_type_hint(root, s) for s in spec["anyOf"] if s.get("type") != "null"]
+        return " | ".join(dict.fromkeys(options)) or "أي"
+    kind = spec.get("type")
+    if kind == "array":
+        return f"قائمة[{_type_hint(root, spec.get('items', {}))}]"
+    if kind == "object":
+        return "كائن"
+    return {"string": "نص", "number": "رقم", "integer": "عدد", "boolean": "منطقي"}.get(
+        kind or "", "أي"
     )
+
+
+def _render_properties(
+    root: dict[str, Any], node: dict[str, Any], lines: list[str], indent: int, depth: int
+) -> None:
+    if depth > 3:
+        return
+    required = set(node.get("required", []))
+    pad = "  " * indent
+    for name, raw in node.get("properties", {}).items():
+        spec = _resolve_ref(root, raw)
+        marker = "مطلوب" if name in required else "اختياري"
+        description = spec.get("description") or ""
+        lines.append(f"{pad}- {name} ({marker}, {_type_hint(root, spec)}): {description}")
+        nested = _resolve_ref(root, spec.get("items", {})) if spec.get("type") == "array" else spec
+        if nested.get("type") == "object" and nested.get("properties"):
+            _render_properties(root, nested, lines, indent + 1, depth + 1)
 
 
 @dataclass(slots=True)
@@ -138,7 +142,26 @@ class LegalChain:
         except Exception:
             return body
 
+    def _schema_block(self) -> str:
+        """Render the expected JSON shape so the model cannot guess the keys.
+
+        Models follow a concrete skeleton far more reliably than the prose
+        instruction "match the schema", and the English key names stay stable
+        for the validator. Nested objects are rendered up to a shallow depth;
+        the top-level keys are what a wrong-language response breaks.
+        """
+        schema = self.output_model.model_json_schema()
+        lines = [
+            "«مخطط المخرجات الإلزامي»: أخرج كائن JSON واحداً بهذه المفاتيح بأسمائها",
+            "الإنجليزية تماماً كما هي — لا تترجم أسماء المفاتيح إلى العربية:",
+        ]
+        _render_properties(schema, schema, lines, 0, 0)
+        return "\n".join(lines)
+
     async def run(self, blocks: Sequence[str], *, context: dict[str, Any] | None = None) -> ChainResult:
+        blocks = list(blocks)
+        if self.output_model is not None:
+            blocks.append(self._schema_block())
         body = self._render(blocks)
         completion = await self._complete_with_retry(body)
         data = completion.data or {}
@@ -197,6 +220,7 @@ def build_query_expansion_chain(provider: LLMProvider | None = None) -> LegalCha
         name="query_expansion",
         system_prompt=QUERY_EXPANSION_PROMPT,
         provider=provider,
+        output_model=QueryExpansionOutput,
         max_tokens=512,
     )
 
@@ -206,6 +230,7 @@ def build_classification_chain(provider: LLMProvider | None = None) -> LegalChai
         name="case_classification",
         system_prompt=CLASSIFICATION_PROMPT,
         provider=provider,
+        output_model=ClassificationOutput,
         max_tokens=512,
     )
 
@@ -215,6 +240,7 @@ def build_evidence_chain(provider: LLMProvider | None = None) -> LegalChain:
         name="evidence_analysis",
         system_prompt=EVIDENCE_SYSTEM_PROMPT,
         provider=provider,
+        output_model=EvidenceAnalysisOutput,
     )
 
 
@@ -223,6 +249,7 @@ def build_reasoning_chain(provider: LLMProvider | None = None) -> LegalChain:
         name="legal_reasoning",
         system_prompt=REASONING_SYSTEM_PROMPT,
         provider=provider,
+        output_model=ReasoningOutput,
     )
 
 
@@ -231,6 +258,7 @@ def build_judgment_chain(provider: LLMProvider | None = None) -> LegalChain:
         name="judgment_draft",
         system_prompt=JUDGMENT_SYSTEM_PROMPT,
         provider=provider,
+        output_model=JudgmentDraft,
     )
 
 
@@ -239,6 +267,7 @@ def build_assistant_chain(provider: LLMProvider | None = None) -> LegalChain:
         name="legal_assistant",
         system_prompt=ASSISTANT_SYSTEM_PROMPT,
         provider=provider,
+        output_model=AssistantOutput,
     )
 
 
@@ -247,6 +276,7 @@ def build_draft_chain(provider: LLMProvider | None = None) -> LegalChain:
         name="legal_draft",
         system_prompt=DRAFT_SYSTEM_PROMPT,
         provider=provider,
+        output_model=DraftOutput,
         max_tokens=3072,
     )
 
