@@ -261,6 +261,27 @@ curl -s localhost:8000/api/v1/health/ready   # يجب أن يكون status=ready
 python scripts/seed_corpus.py --file app/data/corpus/yemeni_laws.json
 ```
 
+### 3.8 نشر بلا Docker (Postgres مثبَّت على المضيف)
+
+عند تعذّر تشغيل Docker (بيئات مقيّدة، خوادم CI)، استعمل سكربت النشر الأصلي. يقوم بأمر
+واحد بكل الخطوات: تثبيت PostgreSQL + pgvector إن لزم، تشغيل العنقود، إنشاء الدور
+وقاعدة البيانات والامتداد، تطبيق مخطط SQL، فهرسة المدونة، ثم تشغيل الـ API. السكربت
+**آمن لإعادة التشغيل** (idempotent) فلا يكرّر ما هو موجود.
+
+```bash
+./scripts/deploy_native.sh          # المنفذ الافتراضي 12000
+PORT=8000 ./scripts/deploy_native.sh
+# أو:
+make deploy
+```
+
+يتطلب صلاحية `sudo` لتثبيت الحزم وإدارة عنقود PostgreSQL. على المنفذ 5432 (وليس 5433)،
+ويولّد `JWT_SECRET` عشوائياً في `.env` عند أول تشغيل.
+
+> ⚠️ **قبل الفتح للعامة:** غيّر `OWNER_PASSWORD` الافتراضية فور أول دخول، واضبط
+> `LLM_PROVIDER`/`EMBEDDING_PROVIDER` على مزوّد حقيقي بمفتاح API. القيم الافتراضية
+> (`mock`/`hash`) تعمل بلا شبكة لكنها للتطوير والاختبار فقط.
+
 ---
 
 ## 4. مثال طلب كامل (cURL)
