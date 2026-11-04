@@ -19,7 +19,9 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import UTC, datetime
+from collections.abc import Mapping
+from datetime import UTC, date, datetime
+from decimal import Decimal
 from typing import Any
 
 from app.core.config import settings
@@ -57,15 +59,48 @@ _COLLECTIONS: tuple[str, ...] = (
 
 
 def _jsonable(value: Any) -> Any:
-    """Make a value JSON-safe (uuids, datetimes, nested containers)."""
-    if isinstance(value, dict):
+    """Make a value JSON-safe.
+
+    Rows read from PostgreSQL arrive as ``asyncpg.Record`` (a mapping, not a
+    ``dict``) and numeric columns as ``Decimal``, so both are normalised here.
+    Without this, an export against a real database fails to serialise — the
+    in-memory stores used by the tests never expose either type.
+    """
+    if isinstance(value, Mapping):
         return {key: _jsonable(item) for key, item in value.items()}
+    # asyncpg.Record is neither a dict nor a Mapping, but is key/value-addressable
+    # (keys() + __getitem__). dict() materialises it into a plain mapping.
+    if not isinstance(value, str | bytes | bytearray) and hasattr(value, "keys"):
+        try:
+            items = dict(value)
+        except (TypeError, ValueError):
+            return value
+        return {key: _jsonable(item) for key, item in items.items()}
     if isinstance(value, list | tuple | set):
         return [_jsonable(item) for item in value]
     if isinstance(value, uuid.UUID):
         return str(value)
-    if isinstance(value, datetime):
+    if isinstance(value, datetime | date):
         return value.isoformat()
+    if isinstance(value, Decimal):
+        return float(value)
+    if isinstance(value, bytes | bytearray | memoryview):
+        return bytes(value).decode("utf-8", "replace")
+    return value
+
+
+def _as_datetime(value: Any) -> Any:
+    """Coerce an ISO-8601 string from a JSON snapshot back to a datetime.
+
+    Snapshots store timestamps as ISO strings; asyncpg rejects a string for a
+    ``timestamptz`` parameter, so a restore into PostgreSQL must convert them.
+    ``None`` and unparseable values pass through as ``None``.
+    """
+    if isinstance(value, str):
+        try:
+            return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
     return value
 
 
@@ -377,10 +412,10 @@ class BackupService:
                     record["role"],
                     record["is_active"],
                     _jsonable(record["permissions"]),
-                    record["last_login_at"],
+                    _as_datetime(record["last_login_at"]),
                     uuid.UUID(str(record["created_by"])) if record["created_by"] else None,
-                    record["created_at"],
-                    record["updated_at"],
+                    _as_datetime(record["created_at"]),
+                    _as_datetime(record["updated_at"]),
                 )
             else:
                 if record["username"] in {u["username"] for u in user_repository._users.values()}:
@@ -416,8 +451,8 @@ class BackupService:
                     record["icon"],
                     record["sort_order"],
                     record["is_active"],
-                    record["created_at"],
-                    record["updated_at"],
+                    _as_datetime(record["created_at"]),
+                    _as_datetime(record["updated_at"]),
                 )
             else:
                 if record["key"] in {s["key"] for s in section_repository._sections.values()}:
@@ -481,8 +516,8 @@ class BackupService:
             case.get("currency") or "YER",
             case.get("facts_summary"),
             _jsonable(case.get("extra") or {}),
-            case.get("created_at") or datetime.now(UTC),
-            case.get("updated_at") or datetime.now(UTC),
+            _as_datetime(case.get("created_at")) or datetime.now(UTC),
+            _as_datetime(case.get("updated_at")) or datetime.now(UTC),
         )
 
     async def _insert_evidence_pg(self, item: dict[str, Any]) -> None:
@@ -508,7 +543,7 @@ class BackupService:
             item.get("sha256"),
             item.get("extracted_text"),
             _jsonable(item.get("metadata") or {}),
-            item.get("created_at") or datetime.now(UTC),
+            _as_datetime(item.get("created_at")) or datetime.now(UTC),
         )
 
     async def _insert_judgment_pg(self, item: dict[str, Any]) -> None:
@@ -536,7 +571,7 @@ class BackupService:
             item.get("grounding_score"),
             _jsonable(item.get("warnings") or []),
             _jsonable(item.get("raw_llm") or {}),
-            item.get("created_at") or datetime.now(UTC),
+            _as_datetime(item.get("created_at")) or datetime.now(UTC),
         )
 
     async def _restore_assistant(self, data: dict[str, Any]) -> None:
@@ -556,8 +591,8 @@ class BackupService:
                     uuid.UUID(str(conv["case_id"])) if conv.get("case_id") else None,
                     conv.get("case_type"),
                     bool(conv.get("is_archived", False)),
-                    conv.get("created_at") or datetime.now(UTC),
-                    conv.get("updated_at") or datetime.now(UTC),
+                    _as_datetime(conv.get("created_at")) or datetime.now(UTC),
+                    _as_datetime(conv.get("updated_at")) or datetime.now(UTC),
                 )
             else:
                 assistant_repository._conversations[conv_id] = conv
@@ -583,7 +618,7 @@ class BackupService:
                     msg.get("model"),
                     msg.get("provider"),
                     bool(msg.get("needs_review", False)),
-                    msg.get("created_at") or datetime.now(UTC),
+                    _as_datetime(msg.get("created_at")) or datetime.now(UTC),
                 )
             else:
                 assistant_repository._messages.setdefault(conv_id, []).append(msg)
@@ -606,11 +641,11 @@ class BackupService:
                     uuid.UUID(str(item["case_id"])) if item.get("case_id") else None,
                     item.get("case_type"),
                     item.get("status") or "draft",
-                    item.get("scheduled_at"),
+                    _as_datetime(item.get("scheduled_at")),
                     item.get("body"),
                     _jsonable(item.get("payload") or {}),
-                    item.get("created_at") or datetime.now(UTC),
-                    item.get("updated_at") or datetime.now(UTC),
+                    _as_datetime(item.get("created_at")) or datetime.now(UTC),
+                    _as_datetime(item.get("updated_at")) or datetime.now(UTC),
                 )
             else:
                 workspace_repository._items[item_id] = item
@@ -627,7 +662,7 @@ class BackupService:
                     entry.get("action") or "restored",
                     entry.get("actor"),
                     _jsonable(entry.get("payload") or {}),
-                    entry.get("created_at") or datetime.now(UTC),
+                    _as_datetime(entry.get("created_at")) or datetime.now(UTC),
                 )
             else:
                 case_repository._audit.append(entry)

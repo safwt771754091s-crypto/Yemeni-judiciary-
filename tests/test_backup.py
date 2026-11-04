@@ -5,6 +5,10 @@ including a round trip that proves data survives export then import.
 """
 from __future__ import annotations
 
+import uuid
+from datetime import UTC, date, datetime
+from decimal import Decimal
+
 import httpx
 import pytest
 
@@ -156,3 +160,88 @@ async def test_backup_service_export_is_json_serialisable() -> None:
     blob = backup_service.export_bytes(snapshot)
     # Must round-trip through JSON without a custom encoder.
     assert json.loads(blob.decode("utf-8"))["format"] == "yemen-legal-backup"
+
+
+# --------------------------------------------------------------------------- #
+# Serialisation of the types only a real PostgreSQL connection produces
+# --------------------------------------------------------------------------- #
+class _FakeRecord:
+    """Stand-in for ``asyncpg.Record``: key/value-addressable, not a dict.
+
+    The real type is a C extension that cannot be constructed directly, but it
+    exposes ``keys()`` and ``__getitem__`` and is neither a ``dict`` nor a
+    ``Mapping`` — the exact shape that broke a database export.
+    """
+
+    def __init__(self, **values: object) -> None:
+        self._values = values
+
+    def keys(self) -> list[str]:
+        return list(self._values)
+
+    def __getitem__(self, key: str) -> object:
+        return self._values[key]
+
+
+def test_jsonable_converts_a_record_like_row() -> None:
+    from app.services.backup import _jsonable
+
+    row = _FakeRecord(id=uuid.uuid4(), key="civil", created_at=datetime.now(UTC))
+    out = _jsonable(row)
+    assert isinstance(out, dict)
+    assert isinstance(out["id"], str)
+    assert isinstance(out["created_at"], str)
+
+
+def test_jsonable_converts_decimal_and_date() -> None:
+    from app.services.backup import _jsonable
+
+    assert _jsonable(Decimal("0.60")) == 0.6
+    assert _jsonable(date(2026, 11, 4)) == "2026-11-04"
+    # A bytes column (bytea) must not break the encoder either.
+    assert _jsonable(b"abc") == "abc"
+
+
+def test_export_bytes_handles_database_typed_rows() -> None:
+    """A snapshot carrying Record-like rows and Decimals must serialise.
+
+    Regression: ``POST /backup/export`` returned 500 with
+    ``Unable to serialize unknown type: <class 'asyncpg.Record'>`` because the
+    in-memory stores used by the tests only ever hold plain dicts and floats.
+    """
+    import json
+
+    from app.schemas.backup import BackupSnapshot
+    from app.services.backup import _jsonable, backup_service
+
+    snapshot = BackupSnapshot(
+        created_at=datetime.now(UTC),
+        app_name="test",
+        data={
+            "sections": [_jsonable(_FakeRecord(id=uuid.uuid4(), key="civil"))],
+            "judgments": _jsonable(
+                [{"id": str(uuid.uuid4()), "confidence": Decimal("0.60")}]
+            ),
+        },
+    )
+    decoded = json.loads(backup_service.export_bytes(snapshot).decode("utf-8"))
+    assert isinstance(decoded["data"]["sections"][0]["id"], str)
+    assert decoded["data"]["judgments"][0]["confidence"] == 0.6
+
+
+def test_as_datetime_coerces_snapshot_timestamps() -> None:
+    """Restore must hand asyncpg real datetimes, not ISO strings.
+
+    Regression: a replace-restore into PostgreSQL failed with ``invalid input
+    for query argument ... (expected a datetime.date or datetime.datetime
+    instance, got 'str')`` because the snapshot stores timestamps as strings.
+    """
+    from app.services.backup import _as_datetime
+
+    parsed = _as_datetime("2026-11-04T18:26:48.932012+00:00")
+    assert isinstance(parsed, datetime)
+    assert parsed.year == 2026
+    assert _as_datetime("2026-11-04T18:26:48Z") is not None
+    # A non-string passes through unchanged; junk becomes None.
+    assert _as_datetime(None) is None
+    assert _as_datetime("not-a-date") is None
