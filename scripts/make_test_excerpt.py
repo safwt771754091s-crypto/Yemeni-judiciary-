@@ -33,6 +33,10 @@ KEEP: dict[str, set[str]] = {
     "criminal_law": {str(n) for n in range(1, 21)},
     "family_law": {str(n) for n in range(1, 21)},
     "criminal_procedure": {str(n) for n in range(1, 11)},
+    # The labour code is the only code a case type maps to that the older corpus
+    # lacked, so a labour case retrieved nothing. Keep its opening articles so
+    # the suite exercises that path.
+    "labour_law": {str(n) for n in range(1, 21)},
 }
 
 def articles_of(text: str) -> dict[str, str]:

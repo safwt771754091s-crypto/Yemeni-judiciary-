@@ -254,3 +254,51 @@ def test_law_priority_orders_by_corpus_position():
     priority = law_priority(sources_for_case_type("مدني"))
     assert priority["civil_law"] < priority["evidence_law"] < priority["civil_procedure"]
     assert law_priority(None) == {}
+
+
+# --------------------------------------------------------------------------- #
+# Corpus coverage: every code the case-type routing names must actually exist
+# --------------------------------------------------------------------------- #
+def _corpus_source_types() -> set[str]:
+    import json
+    from pathlib import Path
+
+    payload = json.loads(
+        (Path(__file__).resolve().parents[1] / "app/data/corpus/yemeni_laws.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    return {entry["document"]["source_type"] for entry in payload["documents"]}
+
+
+def test_every_routed_source_type_exists_in_the_corpus():
+    """A case type must never route to a code the corpus does not contain.
+
+    Regression: «عمالي» routed to ``labour_law``, which the corpus did not ship,
+    so a labour case retrieved nothing and the judgment silently came out with
+    no legal basis. The routing table and the corpus must stay in step.
+    """
+    routed = {source for sources in DEFAULT_SOURCE_TYPES.values() for source in sources}
+    missing = routed - _corpus_source_types()
+    assert not missing, f"case types route to codes absent from the corpus: {sorted(missing)}"
+
+
+async def test_labour_case_retrieves_the_labour_code(seeded_store):
+    """The labour code must be retrievable once it is routed to."""
+    results, _ = await retrieval_service.retrieve_for_case(
+        case={
+            "case_type": "عمالي",
+            "subject_matter": "فصل تعسفي وتعويض عن إنهاء عقد العمل",
+            "facts_summary": "أُنهي عقد عمل العامل دون سبب مشروع ودون إشعار.",
+            "plaintiff_claims": [
+                {"title": "التعويض", "description": "التعويض عن الفصل التعسفي"}
+            ],
+            "defendant_responses": [],
+        },
+        top_k=8,
+        case_type="عمالي",
+    )
+    assert results, "a labour case must retrieve at least one article"
+    assert any(r.source_type.value == "labour_law" for r in results), (
+        "the labour code must be present in the labour case results"
+    )
