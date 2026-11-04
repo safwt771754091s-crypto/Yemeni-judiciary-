@@ -13,6 +13,22 @@
   "background_color": "#0f1720",
   "theme_color": "#132030",
   "categories": ["legal", "productivity", "education"],
+  "screenshots": [
+    {
+      "src": "/ui/icons/screenshot-wide.png",
+      "sizes": "1280x720",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "منصة الذكاء الاصطناعي القانوني — الصفحة التعريفية"
+    },
+    {
+      "src": "/ui/icons/screenshot-mobile.png",
+      "sizes": "720x1280",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "المنصة القانونية الذكية على الجوال"
+    }
+  ],
   "icons": [
     {
       "src": "/ui/icons/icon-192.png",
@@ -35,6 +51,16 @@
   ],
   "shortcuts": [
     {
+      "name": "مساحة العمل القانونية",
+      "short_name": "مساحة العمل",
+      "url": "/ui/workspace.html"
+    },
+    {
+      "name": "المساعد القانوني الذكي",
+      "short_name": "المساعد",
+      "url": "/ui/assistant.html"
+    },
+    {
       "name": "بوابة القاضي",
       "short_name": "القاضي",
       "url": "/ui/judge.html"
@@ -43,11 +69,6 @@
       "name": "بوابة المحامي",
       "short_name": "المحامي",
       "url": "/ui/lawyer.html"
-    },
-    {
-      "name": "المساعد القانوني الذكي",
-      "short_name": "المساعد",
-      "url": "/ui/assistant.html"
     }
   ]
 }

@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0b1219">
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/ui/icons/icon-192.png">
+<link rel="apple-touch-icon" href="/ui/icons/icon-192.png">
+<meta name="description" content="طريقة تثبيت منصة الذكاء الاصطناعي القانوني كتطبيق على أندرويد (وآيفون) خطوة بخطوة.">
+<title>تثبيت التطبيق — منصة الذكاء الاصطناعي القانوني</title>
+<style>
+  :root{
+    --bg:#080d13; --bg2:#0b1219; --panel:#111a24; --panel2:#16212d; --line:#24313f;
+    --ink:#eaf1f8; --muted:#8fa3b8; --gold:#c8a24a; --gold2:#e6c877; --ok:#7fd8a3;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);line-height:1.85;
+    font-family:"Segoe UI","Noto Naskh Arabic",Tahoma,sans-serif}
+  a{color:var(--gold2);text-decoration:none}
+  a:hover{text-decoration:underline}
+  .nav{position:sticky;top:0;z-index:20;background:rgba(8,13,19,.85);backdrop-filter:blur(10px);
+    border-bottom:1px solid var(--line)}
+  .nav .in{max-width:1000px;margin:0 auto;padding:12px 22px;display:flex;align-items:center;gap:12px}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:800;color:var(--gold2)}
+  .brand img{width:32px;height:32px;border-radius:9px}
+  .nav .sp{flex:1}
+  .wrap{max-width:1000px;margin:0 auto;padding:30px 22px 70px}
+  h1{font-size:clamp(24px,3.4vw,36px);margin:8px 0 8px}
+  p.lead{color:var(--muted);font-size:16px;margin:0 0 26px;max-width:720px}
+  .btn{display:inline-flex;align-items:center;gap:8px;border:0;border-radius:11px;
+    padding:13px 26px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit}
+  .btn.gold{background:linear-gradient(135deg,var(--gold),#a8823a);color:#12181f}
+  .btn.gold:hover{filter:brightness(1.09)}
+  .btn.line{background:transparent;border:1px solid var(--line);color:var(--ink)}
+  .btn.line:hover{border-color:var(--gold)}
+  .cta{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:30px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  @media(max-width:800px){.grid{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:22px}
+  .card h2{margin:0 0 12px;font-size:18px;color:var(--gold2);display:flex;align-items:center;gap:9px}
+  .card .e{font-size:22px}
+  ol{counter-reset:s;list-style:none;padding:0;margin:0}
+  ol li{counter-increment:s;position:relative;padding:0 0 16px 0;padding-inline-start:44px;
+    border-inline-start:2px solid var(--line);margin-inline-start:15px;font-size:14.5px}
+  ol li:last-child{border-inline-start-color:transparent;padding-bottom:0}
+  ol li::before{content:counter(s);position:absolute;inset-inline-start:-16px;top:0;
+    width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,var(--gold),#a8823a);
+    color:#12181f;font-weight:800;display:flex;align-items:center;justify-content:center;font-size:14px}
+  ol li b{color:var(--gold2)}
+  .note{background:#16283a;border:1px solid #2f4f6b;color:#bcdcf3;border-radius:11px;
+    padding:12px 16px;font-size:13.5px;margin-top:14px}
+  .status{background:var(--panel2);border:1px solid var(--line);border-radius:13px;
+    padding:16px 18px;margin-bottom:22px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  .status b{color:var(--gold2)}
+  .badge{border-radius:20px;padding:3px 13px;font-size:12.5px;border:1px solid var(--line);color:var(--muted)}
+  .badge.ok{border-color:#2f6b47;color:var(--ok)}
+  footer{border-top:1px solid var(--line);color:var(--muted);font-size:13px;padding:26px 0;text-align:center}
+</style>
+</head>
+<body>
+<nav class="nav"><div class="in">
+  <div class="brand"><img src="/ui/icons/icon-192.png" alt=""><span>المنصة القانونية الذكية</span></div>
+  <span class="sp"></span>
+  <a href="/ui/landing.html">الرئيسية</a>
+</div></nav>
+
+<div class="wrap">
+  <h1>ثبّت المنصة كتطبيق على هاتفك</h1>
+  <p class="lead">المنصة تطبيق ويب تقدّمي (PWA): يُثبَّت مباشرة من المتصفح دون متجر تطبيقات، ويعمل بشاشة كاملة مع أيقونة على الشاشة الرئيسية.</p>
+
+  <div class="status">
+    <span>حالة التثبيت:</span>
+    <b id="instState">جارٍ الفحص…</b>
+    <span class="badge" id="platBadge">—</span>
+    <span class="sp" style="flex:1"></span>
+    <button class="btn gold" id="installBtn">📲 تثبيت التطبيق الآن</button>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h2><span class="e">🤖</span> على أندرويد (Chrome)</h2>
+      <ol>
+        <li>افتح هذا الموقع بمتصفح <b>Chrome</b>.</li>
+        <li>اضغط زر <b>«تثبيت التطبيق الآن»</b> أعلى الصفحة، أو افتح قائمة النقاط الثلاث <b>(⋮)</b>.</li>
+        <li>اختر <b>«تثبيت التطبيق»</b> أو <b>«إضافة إلى الشاشة الرئيسية»</b>.</li>
+        <li>أكّد الضغط على <b>«تثبيت»</b> — سيظهر التطبيق بأيقونته على شاشتك.</li>
+      </ol>
+      <div class="note">إن لم يظهر خيار التثبيت، فتأكد من فتح الموقع عبر <b>https</b> وبمتصفح Chrome، ومن عدم فتحه في وضع التخفي.</div>
+    </div>
+
+    <div class="card">
+      <h2><span class="e">🍎</span> على آيفون (Safari)</h2>
+      <ol>
+        <li>افتح الموقع بمتصفح <b>Safari</b>.</li>
+        <li>اضغط زر <b>المشاركة</b> (المربّع مع السهم المتجه لأعلى).</li>
+        <li>اختر <b>«إضافة إلى الشاشة الرئيسية»</b>.</li>
+        <li>أكّد الضغط على <b>«إضافة»</b>.</li>
+      </ol>
+      <div class="note">على آيفون يجب استخدام Safari تحديداً؛ لا تدعم المتصفحات الأخرى التثبيت.</div>
+    </div>
+
+    <div class="card">
+      <h2><span class="e">💻</span> على الحاسب (Chrome / Edge)</h2>
+      <ol>
+        <li>افتح الموقع بالمتصفح.</li>
+        <li>اضغط أيقونة <b>التثبيت</b> (⊕) في شريط العنوان.</li>
+        <li>أكّد <b>«تثبيت»</b> ليعمل التطبيق في نافذة مستقلة.</li>
+      </ol>
+    </div>
+
+    <div class="card">
+      <h2><span class="e">✅</span> بعد التثبيت</h2>
+      <ol>
+        <li>افتح التطبيق من أيقونته على الشاشة الرئيسية.</li>
+        <li>سجّل الدخول بحسابك للوصول إلى مساحة العمل والبوابات.</li>
+        <li>يعمل التطبيق بشاشة كاملة، ويمكنه عرض الصفحات المحفوظة دون اتصال.</li>
+      </ol>
+    </div>
+  </div>
+
+  <footer>
+    <a href="/ui/landing.html">العودة إلى الصفحة التعريفية</a> ·
+    <a href="/ui/workspace.html">مساحة العمل</a> ·
+    <a href="/ui/index.html">مولّد مسودة الحكم</a>
+  </footer>
+</div>
+
+<script src="/ui/install.js"></script>
+<script>
+  PWAInstall.wireButton("#installBtn");
+  function refresh() {
+    const installed = PWAInstall.isInstalled();
+    const plat = PWAInstall.platform();
+    const labels = { android: "أندرويد", ios: "آيفون", desktop: "حاسب" };
+    document.getElementById("platBadge").textContent = "الجهاز: " + (labels[plat] || plat);
+    const state = document.getElementById("instState");
+    const badge = document.getElementById("platBadge");
+    if (installed) {
+      state.textContent = "مثبَّت ✓";
+      badge.classList.add("ok");
+      document.getElementById("installBtn").style.display = "none";
+    } else {
+      state.textContent = "غير مثبَّت بعد";
+    }
+  }
+  refresh();
+  document.addEventListener("pwa:installed", refresh);
+</script>
+</body>
+</html>

@@ -302,21 +302,56 @@ async def test_workspace_mutations_are_audited(client: httpx.AsyncClient) -> Non
 @pytest.mark.parametrize(
     "path",
     [
+        "/ui/landing.html",
         "/ui/index.html",
         "/ui/judge.html",
         "/ui/lawyer.html",
         "/ui/prosecution.html",
         "/ui/researcher.html",
         "/ui/assistant.html",
+        "/ui/workspace.html",
+        "/ui/install.html",
         "/ui/offline.html",
         "/ui/portal.css",
         "/ui/portal.js",
         "/ui/portal-app.js",
+        "/ui/workspace.css",
+        "/ui/workspace.js",
     ],
 )
 async def test_static_assets_are_served(client: httpx.AsyncClient, path: str) -> None:
     response = await client.get(path)
     assert response.status_code == 200, path
+
+
+async def test_root_serves_the_landing_page(client: httpx.AsyncClient) -> None:
+    response = await client.get("/")
+    assert response.status_code == 200
+    body = response.text
+    # The public front door is the marketing/landing page, not the raw tool.
+    assert "منصة الذكاء الاصطناعي القانوني" in body
+    assert "/ui/workspace.html" in body
+    assert 'id="installBtn"' in body
+
+
+async def test_workspace_page_is_chat_first_and_grounded(client: httpx.AsyncClient) -> None:
+    response = await client.get("/ui/workspace.html")
+    assert response.status_code == 200
+    body = response.text
+    assert "مساحة العمل القانونية" in body
+    # The workspace shell (and its grounding panel) is rendered by workspace.js.
+    js = (await client.get("/ui/workspace.js")).text
+    assert "/assistant/ask" in js
+    assert "cited_articles" in js and "grounding_score" in js
+    assert "المحادثات" in js and "السياق والأسانيد" in js
+
+
+async def test_install_page_documents_android_flow(client: httpx.AsyncClient) -> None:
+    response = await client.get("/ui/install.html")
+    assert response.status_code == 200
+    body = response.text
+    assert "أندرويد" in body and "إضافة إلى الشاشة الرئيسية" in body
+    assert "/ui/install.js" in body
 
 
 async def test_pwa_manifest_and_worker_at_root(client: httpx.AsyncClient) -> None:

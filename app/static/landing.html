@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0b1219">
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/ui/icons/icon-192.png">
+<link rel="apple-touch-icon" href="/ui/icons/icon-192.png">
+<meta name="description" content="منصة ذكاء اصطناعي قانوني للجمهورية اليمنية: استرجاع النصوص القانونية (RAG)، توليد مسودات الأحكام، مساعد قانوني ذكي، ونسخ احتياطي كامل.">
+<title>منصة الذكاء الاصطناعي القانوني — الجمهورية اليمنية</title>
+<style>
+  :root{
+    --bg:#080d13; --bg2:#0b1219; --panel:#111a24; --panel2:#16212d; --line:#24313f;
+    --ink:#eaf1f8; --muted:#8fa3b8; --gold:#c8a24a; --gold2:#e6c877;
+    --ok:#7fd8a3; --info:#8fc4e8;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--ink);line-height:1.85;
+    font-family:"Segoe UI","Noto Naskh Arabic",Tahoma,sans-serif}
+  a{color:var(--gold2);text-decoration:none}
+  a:hover{text-decoration:underline}
+  .wrap{max-width:1160px;margin:0 auto;padding:0 22px}
+
+  /* -- nav --------------------------------------------------------------- */
+  .nav{position:sticky;top:0;z-index:30;backdrop-filter:blur(10px);
+    background:rgba(8,13,19,.82);border-bottom:1px solid var(--line)}
+  .nav .in{max-width:1160px;margin:0 auto;padding:12px 22px;display:flex;align-items:center;gap:14px}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:800;color:var(--gold2)}
+  .brand img{width:34px;height:34px;border-radius:9px}
+  .brand small{display:block;font-weight:400;color:var(--muted);font-size:11px;line-height:1.2}
+  .nav .sp{flex:1}
+  .nav .lnk{color:var(--muted);font-size:14px;margin-inline-start:16px}
+  .nav .lnk:hover{color:var(--ink);text-decoration:none}
+  @media(max-width:900px){.nav .lnk{display:none}}
+  .btn{display:inline-flex;align-items:center;gap:8px;border:0;border-radius:11px;
+    padding:12px 24px;font-size:14.5px;font-weight:700;cursor:pointer;font-family:inherit}
+  .btn.gold{background:linear-gradient(135deg,var(--gold),#a8823a);color:#12181f}
+  .btn.gold:hover{filter:brightness(1.09);text-decoration:none}
+  .btn.line{background:transparent;border:1px solid var(--line);color:var(--ink)}
+  .btn.line:hover{border-color:var(--gold);text-decoration:none}
+  .btn.sm{padding:9px 16px;font-size:13px}
+
+  /* -- hero -------------------------------------------------------------- */
+  .hero{position:relative;overflow:hidden;padding:74px 0 60px;
+    background:
+      radial-gradient(900px 420px at 80% -10%,rgba(200,162,74,.16),transparent 60%),
+      radial-gradient(700px 380px at 0% 10%,rgba(143,196,232,.10),transparent 60%),
+      linear-gradient(180deg,var(--bg2),var(--bg))}
+  .hero .kicker{display:inline-block;border:1px solid var(--line);background:#121c27;
+    color:var(--gold2);border-radius:20px;padding:5px 15px;font-size:12.5px;margin-bottom:18px}
+  .hero h1{margin:0 0 16px;font-size:clamp(28px,4.4vw,50px);line-height:1.3;letter-spacing:-.4px}
+  .hero h1 em{font-style:normal;color:var(--gold2)}
+  .hero p.lead{color:var(--muted);font-size:clamp(15px,1.6vw,19px);max-width:720px;margin:0 0 26px}
+  .hero .cta{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+  .hero .mini{margin-top:22px;color:var(--muted);font-size:13px;display:flex;gap:18px;flex-wrap:wrap}
+  .hero .mini b{color:var(--ok)}
+
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:40px}
+  @media(max-width:760px){.stats{grid-template-columns:1fr 1fr}}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px}
+  .stat b{display:block;font-size:28px;color:var(--gold2);line-height:1.2}
+  .stat span{color:var(--muted);font-size:13px}
+
+  section{padding:64px 0}
+  .eyebrow{color:var(--gold2);font-size:13px;font-weight:700;letter-spacing:.4px}
+  h2.t{font-size:clamp(23px,3vw,34px);margin:8px 0 12px;letter-spacing:-.3px}
+  p.sub{color:var(--muted);font-size:16px;max-width:680px;margin:0 0 34px}
+
+  .feat{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+  @media(max-width:900px){.feat{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:22px;
+    transition:border-color .15s,transform .15s}
+  .card:hover{border-color:var(--gold);transform:translateY(-2px)}
+  .card .ic{width:44px;height:44px;border-radius:11px;background:#1a2635;display:flex;
+    align-items:center;justify-content:center;font-size:21px;margin-bottom:13px}
+  .card h3{margin:0 0 8px;font-size:16.5px;color:var(--gold2)}
+  .card p{margin:0;color:var(--muted);font-size:14px}
+
+  .split{display:grid;grid-template-columns:1fr 1fr;gap:34px;align-items:center}
+  @media(max-width:900px){.split{grid-template-columns:1fr}}
+  .steps{counter-reset:s;list-style:none;padding:0;margin:0}
+  .steps li{counter-increment:s;position:relative;padding:0 0 22px 0;padding-inline-start:52px;
+    border-inline-start:2px solid var(--line);margin-inline-start:18px}
+  .steps li:last-child{border-inline-start-color:transparent}
+  .steps li::before{content:counter(s);position:absolute;inset-inline-start:-19px;top:0;
+    width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--gold),#a8823a);
+    color:#12181f;font-weight:800;display:flex;align-items:center;justify-content:center;font-size:15px}
+  .steps h4{margin:0 0 4px;font-size:15.5px;color:var(--gold2)}
+  .steps p{margin:0;color:var(--muted);font-size:13.5px}
+
+  .mock{background:linear-gradient(180deg,var(--panel2),var(--panel));border:1px solid var(--line);
+    border-radius:16px;overflow:hidden;box-shadow:0 24px 70px rgba(0,0,0,.5)}
+  .mock .bar{display:flex;gap:6px;padding:11px 14px;border-bottom:1px solid var(--line);background:#0e1721}
+  .mock .bar i{width:11px;height:11px;border-radius:50%;background:#33414f;display:block}
+  .mock .bd{padding:18px;display:flex;flex-direction:column;gap:12px}
+  .mock .row{display:flex;gap:10px}
+  .mock .bub{border-radius:12px;padding:11px 14px;font-size:13px;line-height:1.8}
+  .mock .bub.u{background:#1b2733;border:1px solid var(--line);align-self:flex-start;max-width:78%}
+  .mock .bub.a{background:#12202b;border:1px solid var(--line);border-inline-start:3px solid var(--gold);max-width:88%}
+  .mock .cite{display:inline-block;background:#0e1a24;border:1px solid var(--line);
+    border-radius:7px;padding:2px 9px;font-size:11px;color:var(--gold2);margin:3px 3px 0 0}
+
+  .portals{display:grid;grid-template-columns:repeat(5,1fr);gap:12px}
+  @media(max-width:900px){.portals{grid-template-columns:1fr 1fr}}
+  .pt{background:var(--panel);border:1px solid var(--line);border-radius:13px;padding:16px;text-align:center}
+  .pt:hover{border-color:var(--gold);text-decoration:none}
+  .pt .e{font-size:24px}
+  .pt b{display:block;color:var(--ink);margin-top:6px;font-size:14px}
+  .pt span{color:var(--muted);font-size:12px}
+
+  .android{background:linear-gradient(135deg,#0f1a24,#132030);border:1px solid var(--line);
+    border-radius:20px;padding:34px;display:grid;grid-template-columns:1.3fr 1fr;gap:30px;align-items:center}
+  @media(max-width:900px){.android{grid-template-columns:1fr}}
+  .android h2{margin:0 0 10px;font-size:26px;color:var(--gold2)}
+  .android p{color:var(--muted);margin:0 0 18px}
+  .android ol{color:var(--ink);font-size:14px;padding-inline-start:20px;line-height:2}
+  .phone{width:190px;height:380px;border-radius:26px;border:2px solid var(--line);
+    background:#0a1017;margin:0 auto;padding:12px;position:relative}
+  .phone::after{content:"";position:absolute;top:8px;left:50%;transform:translateX(-50%);
+    width:56px;height:6px;border-radius:6px;background:#22303f}
+  .phone .scr{margin-top:16px;display:flex;flex-direction:column;gap:8px}
+  .phone .app{display:flex;align-items:center;gap:9px;background:#131f2a;border:1px solid var(--line);
+    border-radius:11px;padding:9px}
+  .phone .app img{width:30px;height:30px;border-radius:8px}
+  .phone .app b{font-size:12.5px;color:var(--ink);display:block}
+  .phone .app span{font-size:10.5px;color:var(--muted)}
+
+  .warn{background:#3a2b16;border:1px solid #6b5326;color:#f0d59a;border-radius:12px;
+    padding:14px 18px;font-size:13.5px;margin:0 0 8px}
+  footer{border-top:1px solid var(--line);color:var(--muted);font-size:13px;padding:30px 0}
+  footer .in{max-width:1160px;margin:0 auto;padding:0 22px;display:flex;gap:16px;flex-wrap:wrap;align-items:center}
+  footer .sp{flex:1}
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="in">
+    <div class="brand"><img src="/ui/icons/icon-192.png" alt=""><div>المنصة القانونية الذكية<small>الجمهورية اليمنية</small></div></div>
+    <span class="sp"></span>
+    <a class="lnk" href="#features">المزايا</a>
+    <a class="lnk" href="#how">كيف تعمل</a>
+    <a class="lnk" href="#portals">البوابات</a>
+    <a class="lnk" href="#android">تطبيق أندرويد</a>
+    <a class="lnk" href="/docs">وثائق الـ API</a>
+    <a class="btn gold sm" href="/ui/workspace.html">دخول مساحة العمل</a>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <span class="kicker">⚖ ذكاء اصطناعي قانوني مُسنَد إلى النصوص اليمنية</span>
+    <h1>مساحة عمل قانونية <em>بذكاء Harvey</em><br>مبنية على القانون اليمني</h1>
+    <p class="lead">
+      استرجاع دقيق للنصوص القانونية (RAG)، تحليل للأدلة وفق قانون الإثبات،
+      وتوليد مسودات أحكام ومذكرات مُسنَدة إلى مواد محددة — مع مساعد قانوني ذكي
+      يرفض الاستشهاد بأي نص غير موجود حرفياً في المدونة.
+    </p>
+    <div class="cta">
+      <a class="btn gold" href="/ui/workspace.html">ابدأ في مساحة العمل</a>
+      <a class="btn line" href="/ui/index.html">مولّد مسودة الحكم</a>
+      <button class="btn line" id="installBtn" style="display:none">📲 تثبيت التطبيق على أندرويد</button>
+    </div>
+    <div class="mini">
+      <span><b>✓</b> استشهادات مُتحقَّق منها حرفياً</span>
+      <span><b>✓</b> رفض الهلوسة تلقائياً</span>
+      <span><b>✓</b> نسخة احتياطية كاملة</span>
+      <span><b>✓</b> يعمل كتطبيق أندرويد (PWA)</span>
+    </div>
+
+    <div class="stats" id="stats">
+      <div class="stat"><b id="sDocs">—</b><span>قانون في المدونة</span></div>
+      <div class="stat"><b id="sArticles">—</b><span>مادة قانونية</span></div>
+      <div class="stat"><b id="sTypes">—</b><span>نوع مصدر قانوني</span></div>
+      <div class="stat"><b id="sReady">—</b><span>جاهزية النظام</span></div>
+    </div>
+  </div>
+</header>
+
+<section id="features">
+  <div class="wrap">
+    <div class="eyebrow">القدرات</div>
+    <h2 class="t">كل ما يحتاجه العمل القانوني في مكان واحد</h2>
+    <p class="sub">من استرجاع النص إلى المسودة الجاهزة للمراجعة، مع الالتزام الصارم بعدم اختراع أي سند قانوني.</p>
+    <div class="feat">
+      <div class="card"><div class="ic">🔎</div><h3>استرجاع هجين (RAG)</h3>
+        <p>بحث دلالي + لفظي مع دمج RRF على مدونة القوانين اليمنية، وتثبيت المواد التي يستشهد بها الأطراف بأرقامها.</p></div>
+      <div class="card"><div class="ic">📜</div><h3>مسودة حكم منظّمة</h3>
+        <p>الديباجة، الوقائع، الأسباب والحيثيات، والمنطوق — بصيغة JSON وMarkdown وفق شكل الحكم اليمني.</p></div>
+      <div class="card"><div class="ic">🧾</div><h3>تحليل الأدلة</h3>
+        <p>تصنيف الأدلة (كتابة، شهادة، قرينة، إقرار، يمين، خبرة، معاينة) ووزنها وفق قانون الإثبات اليمني.</p></div>
+      <div class="card"><div class="ic">💬</div><h3>مساعد قانوني ذكي</h3>
+        <p>أسئلة وأجوبة مُسنَدة مع سجل محادثات خاص بكل مستخدم، ولوحة سياق تُظهر المواد وخطوات الاستدلال.</p></div>
+      <div class="card"><div class="ic">🗂️</div><h3>بوابات الأدوار</h3>
+        <p>بوابات للقاضي والمحامي والنيابة والباحث مع مساحات عمل وصياغة عقود ومذكرات وقرارات اتهام.</p></div>
+      <div class="card"><div class="ic">🛟</div><h3>نسخة احتياطية كاملة</h3>
+        <p>تصدير واستعادة كل القضايا والمستخدمين والمحادثات في ملف JSON واحد، مع استعادة تجريبية آمنة.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="how" style="background:var(--bg2);border-block:1px solid var(--line)">
+  <div class="wrap">
+    <div class="split">
+      <div>
+        <div class="eyebrow">كيف تعمل</div>
+        <h2 class="t">من الدعوى إلى مسودة مُسنَدة</h2>
+        <p class="sub">أربع خطوات منضبطة، كل استشهاد فيها يعود إلى مادة مُسترجَعة فعلية.</p>
+        <ol class="steps">
+          <li><h4>تقديم الدعوى والأدلة</h4><p>مطالبات المدعي، ردود المدعى عليه، ورفع المستندات (OCR للنصوص الممسوحة).</p></li>
+          <li><h4>الاسترجاع من المدونة</h4><p>تحديد نوع الدعوى، ثم استرجاع المواد ذات الصلة من القوانين اليمنية المختصة.</p></li>
+          <li><h4>الاستدلال ووزن الأدلة</h4><p>تحليل الأدلة وفق قانون الإثبات، وبناء الحيثيات على المواد المسترجَعة فقط.</p></li>
+          <li><h4>المسودة للمراجعة البشرية</h4><p>إخراج مسودة منظّمة تُعلَّم صراحةً بما يحتاج مراجعة، دون اختراع أي وقائع أو سند.</p></li>
+        </ol>
+      </div>
+      <div class="mock">
+        <div class="bar"><i></i><i></i><i></i></div>
+        <div class="bd">
+          <div class="bub u">ما حقوق العامل عند الفصل التعسفي في القانون اليمني؟</div>
+          <div class="bub a">
+            يقرر قانون العمل اليمني حماية العامل من الإنهاء دون سبب مشروع، ويستحق عند ثبوت الفصل التعسفي
+            تعويضاً ومستحقاته كاملة…
+            <div><span class="cite">المادة (…)</span><span class="cite">قانون العمل اليمني</span><span class="cite">✓ مسندة</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="portals">
+  <div class="wrap">
+    <div class="eyebrow">البوابات المتخصصة</div>
+    <h2 class="t">بوابة لكل فاعل في المنظومة القضائية</h2>
+    <p class="sub">صلاحيات دقيقة لكل دور: القاضي يصوغ ويعتمد، المحامي يصوغ العقود والدفوع، النيابة تدير التحقيق والاتهام، والباحث يبحث في السوابق والمواد.</p>
+    <div class="portals">
+      <a class="pt" href="/ui/judge.html"><div class="e">⚖️</div><b>القاضي</b><span>جلسات ومذكرات</span></a>
+      <a class="pt" href="/ui/lawyer.html"><div class="e">👔</div><b>المحامي</b><span>عقود ودفوع</span></a>
+      <a class="pt" href="/ui/prosecution.html"><div class="e">🏛️</div><b>النيابة</b><span>تحقيق واتهام</span></a>
+      <a class="pt" href="/ui/researcher.html"><div class="e">📚</div><b>الباحث</b><span>سوابق وملاحظات</span></a>
+      <a class="pt" href="/ui/workspace.html"><div class="e">🤖</div><b>مساحة العمل</b><span>المساعد الذكي</span></a>
+    </div>
+  </div>
+</section>
+
+<section id="android" style="background:var(--bg2);border-block:1px solid var(--line)">
+  <div class="wrap">
+    <div class="android">
+      <div>
+        <h2>ثبّت المنصة كتطبيق على أندرويد</h2>
+        <p>المنصة تطبيق ويب تقدّمي (PWA) يُثبَّت مباشرة من المتصفح — بلا متجر تطبيقات، ويعمل بشاشة كاملة مع أيقونة على الشاشة الرئيسية.</p>
+        <div class="cta" style="margin-bottom:14px">
+          <button class="btn gold" id="installBtn2">📲 تثبيت التطبيق الآن</button>
+          <a class="btn line" href="/ui/install.html">طريقة التثبيت خطوة بخطوة</a>
+        </div>
+        <ol>
+          <li>افتح الموقع بمتصفح <b>Chrome</b> على جهاز أندرويد.</li>
+          <li>اضغط «تثبيت التطبيق» أو اختر من القائمة «إضافة إلى الشاشة الرئيسية».</li>
+          <li>أكّد التثبيت، وسيظهر التطبيق بأيقونته على شاشتك.</li>
+        </ol>
+      </div>
+      <div class="phone">
+        <div class="scr">
+          <div class="app"><img src="/ui/icons/icon-192.png" alt=""><div><b>المنصة القانونية الذكية</b><span>مساحة العمل · المساعد</span></div></div>
+          <div class="app"><img src="/ui/icons/icon-192.png" alt=""><div><b>مولّد مسودة الحكم</b><span>استرجاع + صياغة</span></div></div>
+          <div class="app"><img src="/ui/icons/icon-192.png" alt=""><div><b>البوابات</b><span>قاضٍ · محامٍ · نيابة</span></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="in">
+    <div class="warn" style="flex:1;min-width:280px">⚠️ المخرجات مسودات آلية لا تُعدّ أحكاماً قضائية إلا بعد مراجعتها واعتمادها من القاضي المختص.</div>
+  </div>
+  <div class="in" style="margin-top:18px">
+    <span>منصة الذكاء الاصطناعي القانوني — الجمهورية اليمنية</span>
+    <span class="sp"></span>
+    <a href="/docs">وثائق الـ API</a>
+    <a href="/api/v1/health/ready">جاهزية النظام</a>
+    <a href="/ui/admin.html">لوحة التحكم</a>
+  </div>
+</footer>
+
+<script src="/ui/install.js"></script>
+<script>
+  PWAInstall.wireButton("#installBtn");
+  PWAInstall.wireButton("#installBtn2");
+
+  async function loadStats() {
+    try {
+      const res = await fetch("/api/v1/ingestion/stats");
+      const s = await res.json();
+      document.getElementById("sDocs").textContent = s.total_documents ?? "—";
+      document.getElementById("sArticles").textContent = s.total_articles ?? "—";
+      document.getElementById("sTypes").textContent = (s.items || []).length || "—";
+    } catch (e) { /* leave the placeholders */ }
+    try {
+      const r = await fetch("/api/v1/health/ready");
+      document.getElementById("sReady").textContent = r.ok ? "تعمل" : "جزئية";
+    } catch (e) { document.getElementById("sReady").textContent = "غير متصلة"; }
+  }
+  loadStats();
+</script>
+</body>
+</html>

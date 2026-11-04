@@ -7,6 +7,7 @@ from app.api.v1.routes import (
     admin,
     assistant,
     auth,
+    backup,
     cases,
     health,
     ingestion,
@@ -20,6 +21,7 @@ api_router = APIRouter()
 api_router.include_router(health.router)
 api_router.include_router(auth.router)
 api_router.include_router(admin.router)
+api_router.include_router(backup.router)
 api_router.include_router(portals.router)
 api_router.include_router(assistant.router)
 api_router.include_router(workspace.router)

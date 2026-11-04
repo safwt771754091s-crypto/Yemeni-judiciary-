@@ -16,6 +16,7 @@ from app.db.user_repository import (
 from app.services.admin import AdminService, admin_service
 from app.services.assistant import AssistantService, assistant_service
 from app.services.auth import AuthService, auth_service
+from app.services.backup import BackupService, backup_service
 from app.services.drafting import DraftingService, drafting_service
 from app.services.evidence import EvidenceService, evidence_service
 from app.services.ingestion import IngestionService, ingestion_service
@@ -87,6 +88,10 @@ def get_drafting_service() -> DraftingService:
     return drafting_service
 
 
+def get_backup_service() -> BackupService:
+    return backup_service
+
+
 async def get_current_user(
     auth: Annotated[AuthService, Depends(get_auth_service)],
     authorization: Annotated[str | None, Header()] = None,
@@ -137,4 +142,5 @@ AssistantDep = Annotated[AssistantService, Depends(get_assistant_service)]
 PortalDep = Annotated[PortalService, Depends(get_portal_service)]
 WorkspaceDep = Annotated[WorkspaceService, Depends(get_workspace_service)]
 DraftingDep = Annotated[DraftingService, Depends(get_drafting_service)]
+BackupDep = Annotated[BackupService, Depends(get_backup_service)]
 OwnerDep = Annotated[dict[str, Any], Depends(require_owner)]

@@ -47,4 +47,17 @@ startup depend on a successful connection.
 - `app/schemas` — Pydantic request/response and draft-judgment models.
 - `app/services` — ingestion, retrieval, evidence, commercial, judgment, pipeline.
 - `app/llm` — provider, prompts, chains, grounding validator.
+- `app/static` — the frontend. `landing.html` (public intro, served at `/`),
+  `index.html` (judgment generator), `workspace.html` + `workspace.js` +
+  `workspace.css` (the chat-first Harvey-style workspace), `install.html`
+  (Android install guide), plus the shared `portal.*` runtime and `sw.js`.
 - `tests` — offline suite; `tests/conftest.py` holds the shared fixtures.
+
+### Frontend pages are asserted by tests
+
+`tests/test_pwa_install.py` requires every page in its `INSTALL_PAGES` list to
+load `/ui/install.js` and to render an `id="installBtn"` (in markup or from the
+page's shell script). `tests/test_portals_assistant.py` asserts the static
+assets are served and that `/` returns the landing page. When you add a page,
+add it to `INSTALL_PAGES` and to the static-asset list, and regenerate the
+manifest screenshots if the layout changes.
