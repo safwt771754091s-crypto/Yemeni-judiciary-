@@ -53,6 +53,10 @@ class Settings(BaseSettings):
     llm_max_retries: int = 3
     llm_retry_base_delay_seconds: float = 2.0
     llm_retry_max_delay_seconds: float = 60.0
+    #: When the hosted model cannot be reached at all (no internet, DNS failure,
+    #: timeout), answer with the deterministic offline reasoner instead of
+    #: failing the request. Set LLM_OFFLINE_FALLBACK=false to surface the error.
+    llm_offline_fallback: bool = True
 
     # --- retrieval ---
     retrieval_top_k: int = 8

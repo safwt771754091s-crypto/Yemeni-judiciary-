@@ -60,6 +60,18 @@ DB_PORT="${DB_PORT:-5433}"
 export SUPABASE_DB_URL="postgresql://legal:legal@127.0.0.1:${DB_PORT}/legal_ai"
 log "عنوان قاعدة البيانات: ${SUPABASE_DB_URL}"
 
+# Offline mode (OFFLINE=1): make no outbound call at all. The hosted model is
+# replaced by the deterministic offline reasoner and embeddings by the local
+# hash provider, so the platform runs on an isolated network. Exported vars
+# override .env (pydantic-settings ranks the environment above the dotenv file),
+# and this is set before seeding so indexing is offline too.
+if [ "${OFFLINE:-0}" = "1" ]; then
+    export LLM_PROVIDER=mock
+    export EMBEDDING_PROVIDER=hash
+    export N8N_ENABLED=false
+    log "وضع عدم الاتصال: المزوّد المحلي فقط (LLM_PROVIDER=mock)"
+fi
+
 # 3. Corpus ------------------------------------------------------------------
 # The volume is recreated empty on every recycle, so seed whenever it is empty.
 COUNT=$($DOCKER exec "$CID" psql -U legal -d legal_ai -tAc \

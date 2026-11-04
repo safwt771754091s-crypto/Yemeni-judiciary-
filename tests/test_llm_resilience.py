@@ -185,3 +185,98 @@ async def test_chain_sends_the_schema_block_to_the_provider():
     )
     await chain.run(["body"])
     assert "queries" in seen["prompt"]
+
+
+# ---------------------------------------------------------------------------
+# Offline fallback: the engine must keep drafting with no internet.
+# ---------------------------------------------------------------------------
+class _UnreachableProvider:
+    """A hosted provider that cannot be reached (no internet)."""
+
+    name = "hosted"
+    model = "hosted-model"
+
+    def __init__(self, details: str = "Connection error.") -> None:
+        self.details = details
+        self.calls = 0
+
+    async def complete(self, **_kwargs) -> Completion:
+        self.calls += 1
+        raise LLMError("فشل استدعاء نموذج الذكاء الاصطناعي", details=self.details)
+
+
+@pytest.mark.asyncio
+async def test_offline_fallback_answers_when_the_hosted_model_is_unreachable():
+    """No internet -> the deterministic reasoner answers instead of a 502."""
+    from app.llm.provider import FallbackLLMProvider
+
+    primary = _UnreachableProvider("Connection error: getaddrinfo failed")
+    provider = FallbackLLMProvider(primary)
+    completion = await provider.complete(
+        system=prompts.JUDGMENT_SYSTEM_PROMPT,
+        messages=[ChatMessage(role="user", content="«الوقائع»: لا شيء")],
+    )
+    assert primary.calls == 1
+    assert completion.data is not None
+    assert completion.provider == "hosted+offline"
+
+
+@pytest.mark.asyncio
+async def test_offline_fallback_does_not_mask_a_model_error():
+    """A reachable provider rejecting the request is a real fault, not offline."""
+    from app.llm.provider import FallbackLLMProvider
+
+    primary = _UnreachableProvider("Error code: 401 - invalid api key")
+    provider = FallbackLLMProvider(primary)
+    with pytest.raises(LLMError):
+        await provider.complete(
+            system="s", messages=[ChatMessage(role="user", content="x")]
+        )
+
+
+def test_offline_failure_detection():
+    from app.llm.provider import is_offline_failure
+
+    assert is_offline_failure(LLMError("x", details="Connection error."))
+    assert is_offline_failure(LLMError("x", details="Name or service not known"))
+    assert is_offline_failure(LLMError("x", details="Request timed out"))
+    assert not is_offline_failure(LLMError("x", details="Error code: 400 - bad request"))
+    assert not is_offline_failure(LLMError("x", details="Error code: 429 - rate limited"))
+
+
+@pytest.mark.asyncio
+async def test_judgment_chain_still_drafts_offline(seeded_store):
+    """End to end: an unreachable hosted model still yields a grounded draft."""
+    from app.llm.provider import FallbackLLMProvider
+    from app.services import judgment as judgment_module
+
+    chain = judgment_module.build_judgment_chain(provider=FallbackLLMProvider(_UnreachableProvider()))
+    service = judgment_module.JudgmentService()
+    service._chain = chain
+
+    case = {
+        "case_number": "1445/2026",
+        "case_type": "مدني",
+        "court_name": "المحكمة الابتدائية - صنعاء",
+        "subject_matter": "مطالبة بتعويض",
+        "plaintiff_name": "أحمد",
+        "defendant_name": "محمد",
+        "facts_summary": "أخل المدعى عليه بالالتزام.",
+    }
+    articles = [
+        {
+            "article_label": "المادة (146)",
+            "law_title": "القانون المدني",
+            "law_number": "14/2002",
+            "content": "يجب الوفاء بالالتزامات.",
+            "source_type": "law",
+            "article_number": "146",
+        }
+    ]
+    envelope, meta = await service.generate(
+        case=case, evidence=[], articles=articles, evidence_analysis=[]
+    )
+    assert envelope.draft.verdict.items, "the offline path must still produce rulings"
+    assert envelope.draft.preamble.case_number == "1445/2026"
+    assert envelope.grounding_score is not None
+    assert meta["provider"].endswith("+offline")

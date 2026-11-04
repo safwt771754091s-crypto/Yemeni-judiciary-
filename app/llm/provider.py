@@ -24,6 +24,7 @@ from typing import Any, Protocol
 from app.core.config import settings
 from app.core.errors import LLMError
 from app.core.logging import get_logger
+from app.llm.retry import STATUS_RE, error_text
 
 logger = get_logger(__name__)
 
@@ -706,12 +707,102 @@ class AnthropicProvider:
 def build_llm_provider() -> LLMProvider:
     provider = settings.llm_provider
     if provider == "openai":
-        return OpenAIProvider()
+        return _maybe_with_fallback(OpenAIProvider(), "openai")
     if provider == "openai_compatible":
-        return OpenAIProvider(base_url=settings.llm_base_url, name="openai_compatible")
+        return _maybe_with_fallback(
+            OpenAIProvider(base_url=settings.llm_base_url, name="openai_compatible"),
+            "openai_compatible",
+        )
     if provider == "anthropic":
-        return AnthropicProvider()
+        return _maybe_with_fallback(AnthropicProvider(), "anthropic")
     return MockLLMProvider()
+
+
+class FallbackLLMProvider:
+    """Wraps a hosted provider and falls back to the offline reasoner.
+
+    The platform must keep working with no internet: a deployed court can lose
+    its connection, and a request must not fail with a 502 when the deterministic
+    engine is right there. When the hosted model is unreachable (connection
+    error, DNS failure, timeout) the offline provider answers instead, using only
+    the retrieved statutes it is handed, so the draft stays grounded. The
+    provider name becomes ``"<hosted>+offline"`` so a caller can tell that a
+    response was produced without the hosted model.
+
+    A model *error* (a 4xx from a reachable provider - bad key, bad request) is
+    still raised: silently masking a misconfiguration would hide a real fault.
+    """
+
+    def __init__(self, primary: LLMProvider, fallback: LLMProvider | None = None) -> None:
+        self._primary = primary
+        self._fallback = fallback or MockLLMProvider()
+        self.name = f"{primary.name}+offline"
+        self.model = primary.model
+
+    async def complete(
+        self,
+        *,
+        system: str,
+        messages: Sequence[ChatMessage],
+        json_mode: bool = True,
+        max_tokens: int | None = None,
+        temperature: float | None = None,
+    ) -> Completion:
+        try:
+            return await self._primary.complete(
+                system=system,
+                messages=messages,
+                json_mode=json_mode,
+                max_tokens=max_tokens,
+                temperature=temperature,
+            )
+        except LLMError as exc:
+            if not is_offline_failure(exc):
+                raise
+            logger.warning(
+                "hosted LLM unreachable, using the offline reasoner",
+                extra={"provider": self._primary.name, "error": error_text(exc)[:200]},
+            )
+        completion = await self._fallback.complete(
+            system=system,
+            messages=messages,
+            json_mode=json_mode,
+            max_tokens=max_tokens,
+            temperature=temperature,
+        )
+        completion.provider = self.name
+        return completion
+
+
+def is_offline_failure(exc: Exception) -> bool:
+    """True when the provider could not be reached at all (not a model error).
+
+    Covers DNS/connection failures, read timeouts and an unknown-host error.
+    A reachable provider that rejects the request (an HTTP status was returned)
+    is *not* an offline failure, even if the transport library wrapped it.
+    """
+    text = error_text(exc)
+    if STATUS_RE.search(text):
+        return False
+    return bool(OFFLINE_RE.search(text))
+
+
+OFFLINE_RE = re.compile(
+    r"(connection\s*error|connection\s*refused|name\s*or\s*service\s*not\s*known|"
+    r"nodename\s*nor\s*servname|temporary\s*failure\s*in\s*name\s*resolution|"
+    r"failed\s*to\s*establish|max\s*retries|apiconnectionerror|"
+    r"getaddrinfo|unreachable|network\s*is\s*unreachable|"
+    r"timed?\s*out|timeout)",
+    re.IGNORECASE,
+)
+
+
+def _maybe_with_fallback(provider: LLMProvider, name: str) -> LLMProvider:
+    """Wrap a hosted provider unless the offline fallback was switched off."""
+    if not settings.llm_offline_fallback:
+        return provider
+    logger.info("hosted LLM wrapped with offline fallback", extra={"provider": name})
+    return FallbackLLMProvider(provider)
 
 
 llm_provider: LLMProvider = build_llm_provider()
