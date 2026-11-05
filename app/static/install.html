@@ -38,6 +38,7 @@
   .grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
   @media(max-width:800px){.grid{grid-template-columns:1fr}}
   .card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:22px}
+  .card.apk{border-color:var(--gold);background:linear-gradient(180deg,#141d27,#111a24);margin-bottom:24px}
   .card h2{margin:0 0 12px;font-size:18px;color:var(--gold2);display:flex;align-items:center;gap:9px}
   .card .e{font-size:22px}
   ol{counter-reset:s;list-style:none;padding:0;margin:0}
@@ -67,7 +68,23 @@
 
 <div class="wrap">
   <h1>ثبّت المنصة كتطبيق على هاتفك</h1>
-  <p class="lead">المنصة تطبيق ويب تقدّمي (PWA): يُثبَّت مباشرة من المتصفح دون متجر تطبيقات، ويعمل بشاشة كاملة مع أيقونة على الشاشة الرئيسية.</p>
+  <p class="lead">المنصة تطبيق ويب تقدّمي (PWA): يُثبَّت مباشرة من المتصفح دون متجر تطبيقات، ويعمل بشاشة كاملة مع أيقونة على الشاشة الرئيسية. ويمكن أيضاً تنزيل تطبيق أندرويد الأصلي (ملف APK) مباشرة.</p>
+
+  <div class="card apk">
+    <h2><span class="e">🤖</span> تطبيق أندرويد (ملف APK)</h2>
+    <p style="margin:0 0 14px;color:var(--muted);font-size:14.5px">
+      نسخة أصلية تعمل بشاشة كاملة وتفتح المنصة مباشرة، مع شاشة «إعادة المحاولة» عند انقطاع
+      الاتصال. لا تحتاج متجر تطبيقات — نزّل الملف وثبّته.
+    </p>
+    <div class="cta" style="margin:0">
+      <a class="btn gold" href="/ui/downloads/yemeni-legal-ai.apk" download>⬇ تنزيل تطبيق أندرويد (APK)</a>
+      <a class="btn line" href="/ui/downloads/yemeni-legal-ai.apk.sha256">بصمة الملف (SHA-256)</a>
+    </div>
+    <div class="note" style="margin-top:14px">
+      عند التثبيت قد يظهر تحذير «مصادر غير معروفة»؛ اسمح بالتركيب من هذا المصدر. الملف موقّع
+      بشهادة التطبيق الخاصة بالمنصة.
+    </div>
+  </div>
 
   <div class="status">
     <span>حالة التثبيت:</span>

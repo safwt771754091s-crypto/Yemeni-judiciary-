@@ -23,3 +23,15 @@ build/
 # local env backups (may contain secrets)
 .env.bak*
 .env.*.bak
+
+# --- Android build ---
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.idea/
+*.iml
+# Signing material: a keystore holds a private key, never commit it.
+android/release.keystore
+android/*.keystore
+android/keystore.properties

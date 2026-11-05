@@ -1,6 +1,7 @@
 """FastAPI application factory for the Yemeni Legal AI Platform."""
 from __future__ import annotations
 
+import mimetypes
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -109,6 +110,10 @@ def create_app() -> FastAPI:
 
     static_dir = Path(__file__).parent / "static"
     if static_dir.is_dir():
+        # Android package files must be served as application/vnd.android.package-archive
+        # or some mobile browsers refuse to install them. Python's mimetypes does
+        # not know the extension by default.
+        mimetypes.add_type("application/vnd.android.package-archive", ".apk")
         app.mount("/ui", StaticFiles(directory=str(static_dir), html=True), name="ui")
 
         # The PWA manifest and service worker are served from the site root so

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="offline_title">لا يوجد اتصال بالإنترنت</string>
+    <string name="offline_message">تعذّر الوصول إلى المنصة القانونية. تحقّق من الاتصال ثم أعد المحاولة.</string>
+    <string name="retry">إعادة المحاولة</string>
+</resources>
