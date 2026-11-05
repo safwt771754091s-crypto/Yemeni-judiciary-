@@ -363,6 +363,47 @@ make offline            # أو: OFFLINE=1 PORT=12000 ./scripts/serve_public.sh
 
 ---
 
+## 3.11 تطبيق أندرويد (ملف APK)
+
+بجانب الـ PWA يوجد تطبيق أندرويد أصلي في `android/`: غلاف WebView رقيق يفتح المنصة
+بشاشة كاملة، يحفظ جلسة الدخول، يفتح الروابط الخارجية في المتصفح، ويعرض شاشة عربية
+«إعادة المحاولة» عند تعذّر الوصول. المنطق يبقى على الخادم، فيخدم نشرٌ واحد الويب
+والتطبيق معاً.
+
+**تنزيل جاهز:** من صفحة `/ui/install.html` (زر «تنزيل تطبيق أندرويد»)، والملف على
+`/ui/downloads/yemeni-legal-ai.apk` مع بصمة SHA-256 بجانبه.
+
+**البناء من المصدر** (يتطلب JDK 17+ وAndroid SDK 34):
+
+```bash
+cd android
+printf 'sdk.dir=/path/to/android-sdk\n' > local.properties
+
+# مفتاح التوقيع (مرة واحدة؛ لا ترفعه للمستودع أبداً)
+keytool -genkeypair -v -keystore release.keystore -alias legal \
+  -keyalg RSA -keysize 2048 -validity 10000
+cat > keystore.properties <<'K'
+storeFile=release.keystore
+storePassword=...
+keyAlias=legal
+keyPassword=...
+K
+
+./gradlew assembleRelease          # أو: gradle assembleRelease
+# الناتج: app/build/outputs/apk/release/app-release.apk
+```
+
+عنوان الخادم مدمج عند البناء، ويمكن تغييره دون تعديل الكود:
+
+```bash
+./gradlew assembleRelease -PplatformUrl=https://your-domain.example
+```
+
+ثم انسخ الناتج إلى `app/static/downloads/yemeni-legal-ai.apk` وأعد تشغيل الخادم.
+
+> ⚠️ شهادة التوقيع هي هوية التطبيق: احفظ `release.keystore` في مكان آمن. فقدانه يعني
+> أن التحديثات المستقبلية لن تُثبَّت فوق النسخة الحالية. الملفات مستثناة من git.
+
 ## 4. مثال طلب كامل (cURL)
 
 ### تقديم دعوى واستخراج مسودة حكم

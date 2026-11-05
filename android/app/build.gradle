@@ -1,0 +1,63 @@
+plugins {
+    id 'com.android.application'
+}
+
+def keystorePropsFile = rootProject.file("keystore.properties")
+def keystoreProps = new Properties()
+if (keystorePropsFile.exists()) {
+    keystoreProps.load(new FileInputStream(keystorePropsFile))
+}
+
+android {
+    namespace 'ye.legal.ai'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "ye.legal.ai"
+        minSdk 24
+        targetSdk 34
+        versionCode 1
+        versionName "1.0.0"
+        resValue "string", "app_name", "المنصة القضائية القانونية اليمنية"
+        // The deployed platform. Override with: ./gradlew assembleRelease -PplatformUrl=https://...
+        buildConfigField "String", "PLATFORM_URL",
+                "\"${project.findProperty('platformUrl') ?: 'https://work-1-ixoimvjksxoackrm.prod-runtime.all-hands.dev'}\""
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+
+    signingConfigs {
+        release {
+            if (keystorePropsFile.exists()) {
+                storeFile rootProject.file(keystoreProps['storeFile'])
+                storePassword keystoreProps['storePassword']
+                keyAlias keystoreProps['keyAlias']
+                keyPassword keystoreProps['keyPassword']
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            shrinkResources false
+            if (keystorePropsFile.exists()) {
+                signingConfig signingConfigs.release
+            }
+        }
+        debug {
+            applicationIdSuffix ".debug"
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    packagingOptions {
+        resources.excludes += ['META-INF/*']
+    }
+}
