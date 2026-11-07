@@ -1,17 +1,17 @@
 # ---------------------------------------------------------------------------
 # Core runtime (required for the API + RAG engine to run)
 # ---------------------------------------------------------------------------
-fastapi==0.115.6
-uvicorn[standard]==0.34.0
-pydantic==2.10.4
-pydantic-settings==2.7.0
-python-multipart==0.0.20
+fastapi==0.162.0
+uvicorn[standard]==0.54.0
+pydantic==2.14.2
+pydantic-settings==2.16.2
+python-multipart==0.0.33
 httpx==0.28.1
-asyncpg==0.30.0
-numpy==2.2.1
-python-dotenv==1.0.1
-tenacity==9.0.0
-pdfplumber==0.11.5
+asyncpg==0.32.0
+numpy==2.5.4
+python-dotenv==1.2.4
+tenacity==9.2.1
+pdfplumber==0.11.10
 
 # ---------------------------------------------------------------------------
 # Document extraction & OCR (case intake)
@@ -23,7 +23,7 @@ pdfplumber==0.11.5
 pymupdf==1.25.1
 Pillow==11.0.0
 pytesseract==0.3.13
-python-docx==1.1.2
+python-docx==1.2.0
 
 # ---------------------------------------------------------------------------
 # LLM / RAG stack (LangChain + LlamaIndex)
@@ -34,10 +34,10 @@ langchain-core==0.3.28
 langchain-text-splitters==0.3.4
 langchain-openai==0.2.14
 langchain-anthropic==0.3.1
-llama-index-core==0.12.11
-llama-index-vector-stores-postgres==0.4.0
-llama-index-embeddings-openai==0.3.1
-llama-index-llms-openai==0.3.14
+llama-index-core==0.14.25
+llama-index-vector-stores-postgres==0.9.0
+llama-index-embeddings-openai==0.7.0
+llama-index-llms-openai==0.8.3
 openai==1.59.6
 anthropic==0.42.0
-tiktoken==0.8.0
+tiktoken==0.14.0
