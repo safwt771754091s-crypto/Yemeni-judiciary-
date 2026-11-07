@@ -57,6 +57,29 @@ def test_status_code_is_read_from_details_not_the_message():
     assert not _is_retryable(LLMError("x", details="Error code: 400"))
 
 
+def test_anthropic_provider_omits_temperature_when_the_sdk_rejects_it():
+    """anthropic>=2 removed ``temperature`` from messages.create.
+
+    The provider probes the installed SDK's signature; when the parameter is
+    gone the call must not carry it, or every request dies with a TypeError
+    before it reaches the network.
+    """
+    import inspect
+
+    from app.llm.provider import _accepts
+
+    class _Old:
+        async def create(self, *, model, system, messages, temperature, max_tokens): ...
+
+    class _New:
+        async def create(self, *, model, system, messages, max_tokens, output_config=None): ...
+
+    assert _accepts(_Old().create, "temperature") is True
+    assert _accepts(_New().create, "temperature") is False
+    # Guard the premise: the SDK really does hide the parameter from callers.
+    assert "temperature" in inspect.signature(_Old.create).parameters
+
+
 @pytest.mark.asyncio
 async def test_mock_judgment_is_grounded_in_the_rendered_case_block():
     """The offline provider must echo case facts and cite only retrieved statutes.
