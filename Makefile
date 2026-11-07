@@ -9,10 +9,15 @@ help:
 install: ## Create venv and install all dependencies
 	python3 -m venv .venv && $(PIP) install --upgrade pip && $(PIP) install -r requirements-dev.txt
 
-dev: ## Run the API with autoreload (foreground: never returns)
+# `dev` and `run` start the server in the FOREGROUND, so they never return.
+# Never call them from an automated/agent command: the call blocks until it is
+# killed and the whole run times out. Use `make serve` (Docker) or `make deploy`
+# (native Postgres) instead — both start the server in the background, wait for
+# readiness and give the shell back.
+dev: ## Run the API with autoreload (foreground: never returns — do not use in automation)
 	$(PY) -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
-run: ## Run the API (production-style)
+run: ## Run the API in the foreground (never returns — use `make serve`/`make deploy` to background it)
 	$(PY) -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2
 
 serve: ## Bring up Docker + pgvector + corpus + API on PORT (default 12000)
