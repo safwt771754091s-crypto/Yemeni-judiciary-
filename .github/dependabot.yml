@@ -1,0 +1,37 @@
+# Keep dependencies current. Dependabot opens the pull requests; the
+# "Dependabot auto-merge" workflow merges them once CI is green.
+#
+# Two ecosystems:
+#   * pip            - requirements.txt / requirements-dev.txt
+#   * github-actions - the action versions used in .github/workflows
+#
+# Minor and patch bumps are grouped into a single pull request per ecosystem to
+# keep the queue small. Major bumps stay in their own pull request so they are
+# easy to spot (they are still merged when CI passes, per the auto-merge policy).
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      python-minor-and-patch:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      actions-minor-and-patch:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch

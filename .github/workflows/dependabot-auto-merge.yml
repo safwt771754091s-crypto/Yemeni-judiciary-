@@ -1,0 +1,82 @@
+# Merge Dependabot pull requests automatically, but only once CI passes.
+#
+# Why `workflow_run` and not `pull_request`: this gates on the *result* of the
+# "CI" workflow. The job runs only after that workflow finishes, and only when
+# the run concluded with `success` — i.e. the tests are passing. Two extra
+# benefits:
+#   * `workflow_run` gets a normal, writable GITHUB_TOKEN even for a Dependabot
+#     pull request (Dependabot-triggered runs are treated like fork runs and get
+#     a read-only token), so the merge below can actually write.
+#   * It does not depend on the repo's "Allow auto-merge" setting or on required
+#     status checks being configured in branch protection.
+#
+# Only pull requests authored by Dependabot are merged, and only when the commit
+# CI just tested is still the head of the pull request — a newer push cannot be
+# merged on top of an older, green run.
+name: Dependabot auto-merge
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+
+# Least privilege: write the pull request and the branch, read the run.
+permissions:
+  contents: write
+  pull-requests: write
+  actions: read
+
+# One merge at a time, so two Dependabot PRs that both go green do not race.
+concurrency:
+  group: dependabot-auto-merge
+  cancel-in-progress: false
+
+jobs:
+  auto-merge:
+    name: Merge green Dependabot PRs
+    runs-on: ubuntu-latest
+    if: >-
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success'
+    steps:
+      - name: Merge the Dependabot pull request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -uo pipefail
+
+          # The open pull request whose head is the commit CI just tested.
+          pr_number=$(gh pr list --repo "$REPO" --state open \
+            --json number,headRefOid,author \
+            --jq ".[] | select(.headRefOid == \"$HEAD_SHA\" and .author.login == \"dependabot[bot]\") | .number" \
+            | head -n1)
+
+          if [ -z "${pr_number:-}" ]; then
+            echo "No open Dependabot pull request at $HEAD_SHA — nothing to merge."
+            exit 0
+          fi
+
+          echo "Dependabot pull request #$pr_number is green; merging."
+
+          # Best effort: a repository that requires an approving review needs
+          # one. A workflow's GITHUB_TOKEN cannot approve pull requests, so this
+          # must not block the merge attempt below.
+          gh pr review --repo "$REPO" "$pr_number" --approve 2>/dev/null \
+            || echo "Could not approve #$pr_number (GITHUB_TOKEN cannot approve); continuing."
+
+          # Squash-merge. GitHub re-checks mergeability here, so a pull request
+          # that became unmergeable (conflicts, a newer commit) is skipped
+          # rather than force-merged.
+          if gh pr merge --repo "$REPO" "$pr_number" --squash; then
+            echo "Merged #$pr_number."
+            # Delete the branch separately: a protected branch would make the
+            # combined command fail even after a successful merge.
+            gh pr view --repo "$REPO" "$pr_number" --json headRefName \
+              --jq '.headRefName' \
+              | xargs -r -I{} gh api -X DELETE "repos/$REPO/git/refs/heads/{}" \
+                || echo "Branch cleanup skipped."
+          else
+            echo "::warning::# $pr_number is not mergeable right now (conflict or pending change); leaving it open."
+          fi

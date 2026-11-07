@@ -43,6 +43,20 @@ output and was killed. Every command you run must be able to finish on its own:
 - `pytest.ini` sets a 120s per-test timeout (`pytest-timeout`) and
   `tests/conftest.py` sets a 10s default socket timeout. Keep both. If you add a
   dependency that opens connections, give it an explicit timeout.
+- The Makefile's `dev` and `run` targets start the server in the foreground and
+  never return. Do not call them from an automated command; use `make serve` or
+  `make deploy`, which background the server. `tests/test_run_safety.py` fails
+  if either target loses its "never return" warning.
+
+## Dependabot auto-merge
+
+Dependabot opens weekly pull requests (`.github/dependabot.yml`) and
+`.github/workflows/dependabot-auto-merge.yml` squash-merges them **only after
+the `CI` workflow completes successfully**. The workflow is triggered by
+`workflow_run` (not `pull_request`) so it gets a writable token for
+Dependabot-authored pull requests, and it merges only the Dependabot pull
+request whose head commit CI just tested. `tests/test_dependabot_automerge.py`
+pins the trigger, the success gate and the Dependabot-only filter.
 
 ## Database connections
 

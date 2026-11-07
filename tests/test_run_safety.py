@@ -65,3 +65,43 @@ def test_docs_do_not_teach_a_blocking_command() -> None:
             assert stripped.startswith("nohup") or "&" in stripped or stripped.startswith("pkill"), (
                 f"README starts the server in the foreground: {stripped}"
             )
+
+
+def test_makefile_warns_about_foreground_servers() -> None:
+    """Every ``make`` target that starts the server in the foreground must warn.
+
+    An automation run was killed because it called such a target and blocked
+    until the deadline: the server never exits, so the command never returns.
+    Targets that background the server (``make serve``/``make deploy``) are
+    safe; the rest must carry a "never return" warning on the target line so an
+    agent reading ``make help`` or the Makefile is warned off.
+    """
+    makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+    targets: list[tuple[str, list[str]]] = []
+    for line in makefile.splitlines():
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        if line[0].isspace():  # recipe line for the current target
+            if targets:
+                targets[-1][1].append(line.strip())
+        elif ":" in line and "=" not in line.split(":", 1)[0]:  # target definition
+            targets.append((line, []))
+
+    def starts_server_in_foreground(header: str, recipe: list[str]) -> bool:
+        for line in [header, *recipe]:
+            if "uvicorn app.main:app" not in line:
+                continue
+            if line.startswith("nohup") or "&" in line or "scripts/" in line:
+                continue
+            return True
+        return False
+
+    foreground = [
+        header for header, recipe in targets if starts_server_in_foreground(header, recipe)
+    ]
+    assert foreground, "expected the Makefile to still document the server"
+    for header in foreground:
+        assert "never return" in header, (
+            "a Makefile target starts the server in the foreground without a "
+            "'never return' warning on its line: " + header
+        )
