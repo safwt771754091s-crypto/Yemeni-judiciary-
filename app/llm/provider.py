@@ -15,6 +15,7 @@ Every provider returns a ``Completion`` carrying the raw text, the parsed JSON
 """
 from __future__ import annotations
 
+import inspect
 import json
 import re
 from collections.abc import Sequence
@@ -29,6 +30,19 @@ from app.llm.retry import STATUS_RE, error_text
 logger = get_logger(__name__)
 
 _JSON_BLOCK = re.compile(r"```(?:json)?\s*(\{.*?\}|\[.*?\])\s*```", re.DOTALL)
+
+
+def _accepts(callable_obj: Any, parameter: str) -> bool:
+    """True when ``callable_obj`` binds a keyword argument named ``parameter``.
+
+    The provider SDKs move parameters between majors (``anthropic`` 2 dropped
+    ``temperature`` from ``messages.create``); probing once at construction lets
+    one code path serve both the old and new signatures.
+    """
+    try:
+        return parameter in inspect.signature(callable_obj).parameters
+    except (TypeError, ValueError):  # pragma: no cover - defensive
+        return False
 
 
 @dataclass(slots=True)
@@ -666,6 +680,7 @@ class AnthropicProvider:
         self._client = AsyncAnthropic(
             api_key=settings.llm_api_key, timeout=settings.llm_timeout_seconds
         )
+        self._accepts_temperature = _accepts(self._client.messages.create, "temperature")
 
     async def complete(
         self,
@@ -679,14 +694,17 @@ class AnthropicProvider:
         system_prompt = system
         if json_mode:
             system_prompt += "\n\nأخرج الإجابة ككائن JSON صالح فقط، دون أي نص آخر."
+        payload = {
+            "model": self.model,
+            "system": system_prompt,
+            "messages": [{"role": m.role, "content": m.content} for m in messages],
+            "max_tokens": max_tokens or settings.llm_max_tokens,
+            "temperature": settings.llm_temperature if temperature is None else temperature,
+        }
+        if not self._accepts_temperature:
+            payload.pop("temperature")
         try:
-            response = await self._client.messages.create(
-                model=self.model,
-                system=system_prompt,
-                messages=[{"role": m.role, "content": m.content} for m in messages],
-                temperature=settings.llm_temperature if temperature is None else temperature,
-                max_tokens=max_tokens or settings.llm_max_tokens,
-            )
+            response = await self._client.messages.create(**payload)
         except Exception as exc:
             raise LLMError("فشل استدعاء نموذج الذكاء الاصطناعي", details=str(exc)) from exc
 
