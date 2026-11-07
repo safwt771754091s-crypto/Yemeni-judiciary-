@@ -127,12 +127,11 @@
       if (e.key === "Enter") doLogin();
     });
 
-    if (!P.api.token()) {
-      document.getElementById("loginWrap").style.display = "flex";
-      return;
-    }
     USER = await P.auth.requireSession();
     if (!USER) return;
+    // Refuse to render a page this role cannot open, even if the server gate
+    // were bypassed; the two checks share the same permission registry.
+    if (!P.auth.guardPage(USER)) return;
     await enterApp();
   }
 
@@ -145,6 +144,7 @@
         document.getElementById("loginPass").value
       );
       USER = await P.auth.me();
+      if (!P.auth.guardPage(USER)) return;
       await enterApp();
     } catch (e) {
       err.textContent = e.message;

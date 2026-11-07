@@ -75,22 +75,23 @@
       return api.get("/auth/signup");
     },
     logout() {
+      // Clear the client token and the server-side session cookie, then return
+      // to the login page. The cookie is HttpOnly, so only the API can remove it.
       api.setToken("");
-      location.href = "/ui/index.html";
+      const done = () => { location.href = "/ui/login.html"; };
+      fetch("/api/v1/auth/logout", { method: "POST" }).then(done, done);
     },
     async me() {
       return api.get("/auth/me");
     },
     async requireSession() {
-      if (!api.token()) {
-        location.href = "/ui/index.html";
-        return null;
-      }
       try {
         return await auth.me();
       } catch (e) {
-        api.setToken("");
-        location.href = "/ui/index.html";
+        // No token and no cookie: send the visitor to the login page, keeping
+        // the page they wanted so they land there after signing in.
+        const next = encodeURIComponent(location.pathname);
+        location.href = "/ui/login.html?next=" + next;
         return null;
       }
     },
@@ -98,6 +99,25 @@
       if (!user) return false;
       const perms = user.effective_permissions || user.permissions || [];
       return user.role === "owner" || perms.indexOf(permission) !== -1;
+    },
+    // The permission each gated page needs, mirroring app/core/permissions.py.
+    // Kept here so a page can refuse to render for the wrong role even before
+    // any data call - the server-side gate is the authoritative check.
+    pagePermissions: {
+      "/ui/admin.html": "portal.admin",
+      "/ui/judge.html": "portal.judge",
+      "/ui/lawyer.html": "portal.lawyer",
+      "/ui/prosecution.html": "portal.prosecution",
+      "/ui/researcher.html": "portal.researcher",
+      "/ui/workspace.html": "portal.workspace",
+      "/ui/assistant.html": "assistant.use",
+      "/ui/intake.html": "cases.write",
+    },
+    guardPage(user) {
+      const required = auth.pagePermissions[location.pathname];
+      if (!required || auth.has(user, required)) return true;
+      location.replace("/ui/forbidden.html");
+      return false;
     },
   };
 

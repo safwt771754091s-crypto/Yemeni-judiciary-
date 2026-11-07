@@ -188,4 +188,32 @@ def portals_catalogue() -> list[dict[str, Any]]:
     return result
 
 
+def page_permission_matrix() -> dict[str, Any]:
+    """Every gated page, its permission, and the roles that hold it.
+
+    Powers the admin "page permissions" tab: one row per page, one column per
+    role, so an operator can see at a glance which roles reach which page.
+    """
+    from app.core.permissions import PAGE_LABELS_AR, PAGE_PERMISSIONS, ROLE_PERMISSIONS
+
+    pages = [
+        {
+            "path": path,
+            "title_ar": PAGE_LABELS_AR.get(path, path),
+            "permission": permission,
+        }
+        for path, permission in PAGE_PERMISSIONS.items()
+    ]
+    roles = [
+        {
+            "role": role.value,
+            "label_ar": ROLE_LABELS_AR[role],
+            "permissions": sorted(ROLE_PERMISSIONS[role]),
+            "is_owner": role is Role.OWNER,
+        }
+        for role in Role
+    ]
+    return {"pages": pages, "roles": roles}
+
+
 portal_service = PortalService()

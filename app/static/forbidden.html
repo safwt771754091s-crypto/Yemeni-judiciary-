@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#132030">
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/ui/icons/icon-192.png">
+<link rel="apple-touch-icon" href="/ui/icons/icon-192.png">
+<title>لا تملك صلاحية الوصول — المنصة القضائية القانونية اليمنية</title>
+<link rel="stylesheet" href="/ui/portal.css">
+</head>
+<body>
+<noscript><div class="wrap"><div class="warn">هذه الصفحة تتطلب تشغيل JavaScript.</div></div></noscript>
+
+<div class="login-wrap">
+  <div class="login-card">
+    <div class="logo">
+      <img src="/ui/icons/icon-192.png" alt="">
+      <h1>لا تملك صلاحية الوصول</h1>
+    </div>
+    <p class="sub">هذه الصفحة مخصّصة لدور آخر. يمكنك العودة إلى بوابتك أو تسجيل الدخول بحساب مختلف.</p>
+    <div id="whoami" class="muted" style="margin-bottom:14px"></div>
+    <div class="actions">
+      <button class="primary" id="homeBtn">الذهاب إلى بوابتي</button>
+      <button class="ghost" id="logoutBtn">تسجيل الخروج</button>
+    </div>
+  </div>
+</div>
+
+<script src="/ui/install.js"></script>
+<script src="/ui/portal.js"></script>
+<script>
+  (function () {
+    "use strict";
+    const P = window.Portal;
+    document.getElementById("homeBtn").onclick = async () => {
+      const user = await P.auth.me().catch(() => null);
+      const portal = user && user.role_portal_page;
+      location.href = portal || "/ui/workspace.html";
+    };
+    document.getElementById("logoutBtn").onclick = () => P.auth.logout();
+    P.auth.me().then((user) => {
+      if (!user) return;
+      const role = user.role_label_ar || user.role;
+      document.getElementById("whoami").textContent = "مسجّل الدخول بصفة: " + role;
+    }).catch(() => {});
+  })();
+</script>
+</body>
+</html>

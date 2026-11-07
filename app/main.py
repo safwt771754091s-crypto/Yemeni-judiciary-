@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from app.api.pages import page_gate
 from app.api.v1.router import api_router
 from app.core.config import settings
 from app.core.errors import register_exception_handlers
@@ -104,6 +105,11 @@ def create_app() -> FastAPI:
         response = await call_next(request)
         response.headers["X-Process-Time-Ms"] = f"{(time.perf_counter() - started) * 1000:.2f}"
         return response
+
+    # Per-page access control for the static role portals: a gated page is
+    # checked before the static mount can serve it, so a direct URL cannot
+    # bypass the role's permissions.
+    app.middleware("http")(page_gate)
 
     register_exception_handlers(app)
     app.include_router(api_router, prefix=settings.api_prefix)

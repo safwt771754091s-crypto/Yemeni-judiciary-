@@ -3,8 +3,9 @@ from __future__ import annotations
 
 from typing import Annotated, Any
 
-from fastapi import Depends, Header
+from fastapi import Depends, Header, Request
 
+from app.api.pages import SESSION_COOKIE
 from app.core.errors import ForbiddenError, UnauthorizedError
 from app.db.repositories import CaseRepository, case_repository
 from app.db.user_repository import (
@@ -94,12 +95,20 @@ def get_backup_service() -> BackupService:
 
 async def get_current_user(
     auth: Annotated[AuthService, Depends(get_auth_service)],
+    request: Request,
     authorization: Annotated[str | None, Header()] = None,
 ) -> dict[str, Any]:
-    """Resolve the caller from the ``Authorization: Bearer <token>`` header."""
-    if not authorization or not authorization.lower().startswith("bearer "):
-        raise UnauthorizedError("يتطلب هذا الإجراء تسجيل الدخول")
-    token = authorization.split(" ", 1)[1].strip()
+    """Resolve the caller from the bearer token or the session cookie.
+
+    API clients send ``Authorization: Bearer <token>``. The static pages carry
+    an HttpOnly session cookie instead, so a page request can authenticate
+    itself without JavaScript ever touching the token.
+    """
+    token = ""
+    if authorization and authorization.lower().startswith("bearer "):
+        token = authorization.split(" ", 1)[1].strip()
+    if not token:
+        token = request.cookies.get(SESSION_COOKIE, "")
     if not token:
         raise UnauthorizedError("يتطلب هذا الإجراء تسجيل الدخول")
     return await auth.user_from_token(token)

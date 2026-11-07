@@ -12,6 +12,7 @@ import pytest
 from app.core.permissions import Role
 from app.db.user_repository import user_repository
 from app.main import app
+from app.services.auth import auth_service
 
 OWNER = "owner"
 OWNER_PW = "Owner@Yemen2026"
@@ -304,14 +305,10 @@ async def test_workspace_mutations_are_audited(client: httpx.AsyncClient) -> Non
     [
         "/ui/landing.html",
         "/ui/index.html",
-        "/ui/judge.html",
-        "/ui/lawyer.html",
-        "/ui/prosecution.html",
-        "/ui/researcher.html",
-        "/ui/assistant.html",
-        "/ui/workspace.html",
         "/ui/install.html",
         "/ui/offline.html",
+        "/ui/login.html",
+        "/ui/forbidden.html",
         "/ui/portal.css",
         "/ui/portal.js",
         "/ui/portal-app.js",
@@ -319,9 +316,42 @@ async def test_workspace_mutations_are_audited(client: httpx.AsyncClient) -> Non
         "/ui/workspace.js",
     ],
 )
-async def test_static_assets_are_served(client: httpx.AsyncClient, path: str) -> None:
+async def test_public_assets_are_served(client: httpx.AsyncClient, path: str) -> None:
     response = await client.get(path)
     assert response.status_code == 200, path
+
+
+#: Pages behind the Harvey-style per-page permission gate.
+GATED_PAGES = [
+    "/ui/admin.html",
+    "/ui/judge.html",
+    "/ui/lawyer.html",
+    "/ui/prosecution.html",
+    "/ui/researcher.html",
+    "/ui/assistant.html",
+    "/ui/workspace.html",
+]
+
+
+@pytest.mark.parametrize("path", GATED_PAGES)
+async def test_gated_pages_require_a_session(client: httpx.AsyncClient, path: str) -> None:
+    response = await client.get(path)
+    # No session: the server redirects to the login page instead of serving it.
+    assert response.status_code == 302, path
+    assert "/ui/login.html" in response.headers["location"]
+
+
+async def test_owner_opens_every_gated_page(client: httpx.AsyncClient) -> None:
+    await auth_service.ensure_owner()
+    login = await client.post(
+        "/api/v1/auth/login", json={"username": OWNER, "password": OWNER_PW}
+    )
+    assert login.status_code == 200
+    # The login set the HttpOnly session cookie on the client; the owner holds
+    # every permission, so every gated page is served.
+    for path in GATED_PAGES:
+        response = await client.get(path)
+        assert response.status_code == 200, path
 
 
 async def test_root_serves_the_landing_page(client: httpx.AsyncClient) -> None:
@@ -335,6 +365,8 @@ async def test_root_serves_the_landing_page(client: httpx.AsyncClient) -> None:
 
 
 async def test_workspace_page_is_chat_first_and_grounded(client: httpx.AsyncClient) -> None:
+    await auth_service.ensure_owner()
+    await client.post("/api/v1/auth/login", json={"username": OWNER, "password": OWNER_PW})
     response = await client.get("/ui/workspace.html")
     assert response.status_code == 200
     body = response.text

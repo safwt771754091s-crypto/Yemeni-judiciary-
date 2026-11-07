@@ -69,6 +69,65 @@ ROLE_PORTALS: dict[Role, dict[str, str]] = {
 #: The portal keys, in navigation order.
 PORTAL_KEYS: tuple[str, ...] = ("admin", "judge", "lawyer", "prosecution", "researcher")
 
+#: Page-level access control (Harvey-style): every gated page maps to the single
+#: permission that unlocks it. The owner holds every permission, so the owner can
+#: open every page; other roles open only the pages their role unlocks. The check
+#: is enforced twice - server-side before the page is served (see app/api/pages.py)
+#: and client-side before the shell renders - so a direct URL cannot bypass it.
+PAGE_PERMISSIONS: dict[str, str] = {
+    "/ui/admin.html": "portal.admin",
+    "/ui/judge.html": "portal.judge",
+    "/ui/lawyer.html": "portal.lawyer",
+    "/ui/prosecution.html": "portal.prosecution",
+    "/ui/researcher.html": "portal.researcher",
+    "/ui/workspace.html": "portal.workspace",
+    "/ui/assistant.html": "assistant.use",
+    "/ui/intake.html": "cases.write",
+}
+
+#: Arabic titles for each gated page, for the admin permission matrix.
+PAGE_LABELS_AR: dict[str, str] = {
+    "/ui/admin.html": "لوحة تحكم المنصة",
+    "/ui/judge.html": "بوابة القاضي",
+    "/ui/lawyer.html": "بوابة المحامي",
+    "/ui/prosecution.html": "بوابة النيابة العامة",
+    "/ui/researcher.html": "بوابة الباحث والطالب",
+    "/ui/workspace.html": "مساحة العمل القانونية",
+    "/ui/assistant.html": "المساعد القانوني الذكي",
+    "/ui/intake.html": "استلام القضية وتفصيلها",
+}
+
+#: Pages anyone may open, with no session required (marketing / onboarding).
+PUBLIC_PAGES: frozenset[str] = frozenset(
+    {
+        "/ui/landing.html",
+        "/ui/index.html",
+        "/ui/signup.html",
+        "/ui/install.html",
+        "/ui/offline.html",
+        "/ui/login.html",
+        "/ui/forbidden.html",
+    }
+)
+
+
+def page_permission(path: str) -> str | None:
+    """The permission a page requires, or ``None`` when the page is public.
+
+    Unknown paths (assets, scripts, stylesheets, the API) return ``None`` so the
+    caller only ever gates the pages listed in :data:`PAGE_PERMISSIONS`.
+    """
+    clean = path.rstrip("/") or "/"
+    return PAGE_PERMISSIONS.get(clean)
+
+
+def can_open_page(user: dict, path: str) -> bool:
+    """Whether ``user`` may open ``path``; public pages are open to everyone."""
+    required = page_permission(path)
+    if required is None:
+        return True
+    return has_permission(user["role"], required, user.get("permissions") or [])
+
 # Permission catalogue: resource.action
 PERMISSIONS: frozenset[str] = frozenset(
     {
@@ -111,6 +170,14 @@ PERMISSIONS: frozenset[str] = frozenset(
         "assistant.use",
         # Backup and restore (النسخة الاحتياطية)
         "backup.manage",
+        # Page-level access (Harvey-style): each gated page needs its own grant.
+        # portal.admin is owner-only by default; the rest mirror the role portals.
+        "portal.admin",
+        "portal.judge",
+        "portal.lawyer",
+        "portal.prosecution",
+        "portal.researcher",
+        "portal.workspace",
     }
 )
 
@@ -125,6 +192,7 @@ READ_ONLY: frozenset[str] = frozenset(
         "cases.read",
         "judgments.read",
         "research.read",
+        "portal.researcher",
     }
 )
 
@@ -151,6 +219,9 @@ ROLE_PERMISSIONS: dict[Role, frozenset[str]] = {
             "judgments.approve",
             "assistant.use",
             "backup.manage",
+            "portal.admin",
+            "portal.workspace",
+            "portal.researcher",
         }
     ),
     Role.EDITOR: frozenset(
@@ -163,8 +234,12 @@ ROLE_PERMISSIONS: dict[Role, frozenset[str]] = {
             "articles.delete",
             "corpus.ingest",
             "cases.read",
+            "cases.write",
             "judgments.read",
             "assistant.use",
+            "portal.admin",
+            "portal.workspace",
+            "portal.researcher",
         }
     ),
     Role.REVIEWER: frozenset(
@@ -177,6 +252,9 @@ ROLE_PERMISSIONS: dict[Role, frozenset[str]] = {
             "judgments.approve",
             "memos.review",
             "assistant.use",
+            "portal.judge",
+            "portal.workspace",
+            "portal.researcher",
         }
     ),
     Role.VIEWER: READ_ONLY,
@@ -197,6 +275,9 @@ ROLE_PERMISSIONS: dict[Role, frozenset[str]] = {
             "memos.review",
             "research.read",
             "assistant.use",
+            "portal.judge",
+            "portal.workspace",
+            "portal.researcher",
         }
     ),
     # A lawyer drafts contracts, breaks down financial claims and drafts
@@ -215,6 +296,9 @@ ROLE_PERMISSIONS: dict[Role, frozenset[str]] = {
             "memos.review",
             "research.read",
             "assistant.use",
+            "portal.lawyer",
+            "portal.workspace",
+            "portal.researcher",
         }
     ),
     # A prosecutor manages investigation records and charge decisions.
@@ -231,6 +315,9 @@ ROLE_PERMISSIONS: dict[Role, frozenset[str]] = {
             "memos.review",
             "research.read",
             "assistant.use",
+            "portal.prosecution",
+            "portal.workspace",
+            "portal.researcher",
         }
     ),
     # A researcher / student searches precedents, the constitution and statutes.
@@ -243,6 +330,8 @@ ROLE_PERMISSIONS: dict[Role, frozenset[str]] = {
             "judgments.read",
             "research.read",
             "assistant.use",
+            "portal.researcher",
+            "portal.workspace",
         }
     ),
 }
