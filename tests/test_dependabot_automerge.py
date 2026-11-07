@@ -25,6 +25,18 @@ def test_dependabot_tracks_pip_and_actions() -> None:
     assert "package-ecosystem: github-actions" in config
 
 
+def test_dependabot_does_not_propose_an_uninstallable_openai_major() -> None:
+    """openai 3.x cannot install: llama-index-llms-openai requires openai<3.
+
+    Without this ignore, Dependabot re-opens a pull request every cycle whose
+    ``pip install`` fails with ResolutionImpossible, and the auto-merge job can
+    never merge it.
+    """
+    config = DEPENDABOT.read_text(encoding="utf-8")
+    assert "dependency-name: openai" in config
+    assert "version-update:semver-major" in config
+
+
 def test_auto_merge_is_gated_on_the_ci_workflow_result() -> None:
     workflow = AUTO_MERGE.read_text(encoding="utf-8")
     # Triggered by CI finishing, and only when it succeeded — "so long as the

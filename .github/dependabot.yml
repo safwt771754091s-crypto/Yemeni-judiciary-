@@ -22,6 +22,14 @@ updates:
         update-types:
           - minor
           - patch
+    ignore:
+      # openai 3.x cannot install alongside this stack: llama-index-llms-openai
+      # requires openai<3, so every 3.x pull request fails `pip install` with
+      # ResolutionImpossible. Suppress the major bump until that package widens
+      # its range; minor and patch updates to openai 2.x are still proposed.
+      - dependency-name: openai
+        update-types:
+          - version-update:semver-major
 
   - package-ecosystem: github-actions
     directory: "/"
