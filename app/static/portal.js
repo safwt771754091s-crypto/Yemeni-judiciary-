@@ -74,6 +74,26 @@
     async signupOptions() {
       return api.get("/auth/signup");
     },
+    async forgotPassword(email) {
+      return api.post("/auth/forgot-password", { email });
+    },
+    async resetPassword(token, password) {
+      return api.post("/auth/reset-password", { token, password });
+    },
+    async verifyEmail(token) {
+      return api.post("/auth/verify-email", { token });
+    },
+    async resendVerification() {
+      return api.post("/auth/resend-verification", {});
+    },
+    async googleStatus() {
+      // Never let a missing Google config break the login page.
+      try {
+        return await api.get("/auth/google");
+      } catch (e) {
+        return { enabled: false };
+      }
+    },
     logout() {
       // Clear the client token and the server-side session cookie, then return
       // to the login page. The cookie is HttpOnly, so only the API can remove it.

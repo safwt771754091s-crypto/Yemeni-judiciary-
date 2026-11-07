@@ -280,10 +280,43 @@ curl -s -X POST http://localhost:8000/api/v1/auth/signup \
 تعطيله يبقى إنشاء الحسابات متاحاً لمالك المنصة والمدير عبر `POST /api/v1/auth/users`.
 
 قواعد التحقق: اسم مستخدم من 3 أحرف (`a-z`, `0-9`, `.`, `_`, `-`)، كلمة مرور من 8
-أحرف تجمع حروفاً وأرقاماً، اسم كامل إلزامي، وبريد إلكتروني اختياري وفريد. يُرفض
+أحرف تجمع حروفاً وأرقاماً، اسم كامل إلزامي، وبريد إلكتروني إلزامي وفريد. يُرفض
 تكرار اسم المستخدم أو البريد برمز `409`.
 
-### 3.8 Docker (اختياري)
+### 3.8 استعادة كلمة المرور وتأكيد البريد والدخول بجوجل
+
+ثلاث خدمات ذاتية جديدة، جميعها تعمل دون خادم بريد في بيئة التطوير:
+
+- **نسيت كلمة المرور** — الصفحة `/ui/forgot.html` ترسل رابطاً إلى البريد المسجَّل،
+  والصفحة `/ui/reset.html` تعيّن كلمة مرور جديدة. الرد واحد دائماً سواء كان البريد
+  مسجَّلاً أم لا، حتى لا يُستخدم الرابط لمعرفة الحسابات الموجودة.
+- **تأكيد البريد** — يُرسَل رابط تأكيد عند إنشاء الحساب، وتُعيده الصفحة
+  `/ui/verify.html`. يظهر شريط تنبيه في مساحة العمل مع زر لإعادة الإرسال حتى تأكيد البريد.
+- **الدخول بجوجل** — زر «الدخول باستخدام جوجل» في صفحتي الدخول والتسجيل، ويظهر
+  فقط عند ضبط `GOOGLE_CLIENT_ID` و`GOOGLE_CLIENT_SECRET`.
+
+```bash
+# 1) طلب رابط استعادة كلمة المرور
+curl -s -X POST http://localhost:8000/api/v1/auth/forgot-password \
+  -H "Content-Type: application/json" -d '{"email": "a.saleh@example.com"}'
+
+# 2) تعيين كلمة مرور جديدة بالرمز المستلم
+curl -s -X POST http://localhost:8000/api/v1/auth/reset-password \
+  -H "Content-Type: application/json" \
+  -d '{"token": "<TOKEN>", "password": "NewPass123"}'
+
+# 3) تأكيد البريد الإلكتروني
+curl -s -X POST http://localhost:8000/api/v1/auth/verify-email \
+  -H "Content-Type: application/json" -d '{"token": "<TOKEN>"}'
+```
+
+يُخزَّن كل رمز (إعادة التعيين/التأكيد) مُجزَّأً (`SHA-256`) في جدول `account_tokens`
+ويُستهلك مرة واحدة فقط. لتفعيل إرسال البريد الحقيقي اضبط `MAIL_PROVIDER=smtp`
+(مع `SMTP_*`) أو `MAIL_PROVIDER=resend` (مع `RESEND_API_KEY`)؛ الوضع الافتراضي
+`console` يسجّل الرسالة والرابط فقط. ولإلزام تأكيد البريد قبل الدخول اضبط
+`REQUIRE_EMAIL_VERIFICATION=true`.
+
+### 3.9 Docker (اختياري)
 
 قاعدة Postgres/pgvector المحلية تُنشر على المنفذ **5433** (وليس 5432، تجنباً للتعارض مع أي
 Postgres مثبَّت على المضيف). لذلك يجب أن يشير `.env` إليها قبل التشغيل:
@@ -704,6 +737,13 @@ http://localhost:8000/ui/intake.html
 | POST | `/api/v1/auth/login` | عام | تسجيل الدخول واستلام رمز الوصول |
 | GET | `/api/v1/auth/signup` | عام | خيارات التسجيل الذاتي والأدوار المتاحة |
 | POST | `/api/v1/auth/signup` | عام | إنشاء حساب جديد (تسجيل ذاتي) |
+| POST | `/api/v1/auth/forgot-password` | عام | طلب رابط إعادة تعيين كلمة المرور |
+| POST | `/api/v1/auth/reset-password` | عام | تعيين كلمة مرور جديدة برمز الاستعادة |
+| POST | `/api/v1/auth/verify-email` | عام | تأكيد البريد الإلكتروني برمز التحقق |
+| POST | `/api/v1/auth/resend-verification` | مصادق | إعادة إرسال رسالة تأكيد البريد |
+| GET | `/api/v1/auth/google` | عام | هل الدخول بجوجل مُفعَّل |
+| GET | `/api/v1/auth/google/authorize` | عام | بدء تفويض جوجل (تحويل) |
+| GET | `/api/v1/auth/google/callback` | عام | عودة جوجل وإنشاء الجلسة |
 | GET | `/api/v1/auth/me` | مصادق | بيانات المستخدم وصلاحياته الفعّالة |
 | GET | `/api/v1/auth/permissions` | عام | كتالوج الصلاحيات وأدوار النظام |
 | GET | `/api/v1/auth/roles` | عام | الأدوار وتسمياتها العربية |
@@ -813,8 +853,10 @@ ruff check app scripts tests
 │   ├── services/                   # ingestion, retrieval, evidence, judgment, pipeline,
 │   │                               #   intake (الاستلام والتفصيل), case_details (تفصيل الدعوى),
 │   │                               #   classification (تصنيف الدعوى), document_extraction (OCR),
-│   │                               #   n8n, auth (المالك), admin (إدارة المنصة)
-│   ├── static/                     # index.html, admin.html, intake.html, signup.html
+│   │                               #   n8n, auth (المالك), admin (إدارة المنصة),
+│   │                               #   account (استعادة/تأكيد/جوجل), mailer (إرسال البريد)
+│   ├── static/                     # index.html, admin.html, intake.html, signup.html,
+│   │                               #   login.html, forgot.html, reset.html, verify.html
 │   └── data/samples/               # مدونة يمنية تجريبية
 ├── sql/
 │   ├── 001_init_pgvector.sql       # الجداول والفهارس (HNSW, GIN, trigram)
@@ -822,7 +864,8 @@ ruff check app scripts tests
 │   ├── 003_auth_rbac.sql           # platform_users, roles, sections, permissions
 │   ├── 004_assistant.sql           # محادثات المساعد القانوني
 │   ├── 005_portal_workspace.sql    # مساحات عمل البوابات
-│   └── 006_portal_roles.sql        # أدوار البوابات على نوع user_role
+│   ├── 006_portal_roles.sql        # أدوار البوابات على نوع user_role
+│   └── 007_account_selfservice.sql # email_verified, google_sub, account_tokens
 ├── scripts/
 │   ├── seed_corpus.py              # إدخال المدونة القانونية
 │   └── apply_sql.py                # تنفيذ مخطط SQL

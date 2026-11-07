@@ -123,10 +123,62 @@ class Settings(BaseSettings):
         Role.PROSECUTOR,
     ]
 
-    @field_validator("llm_api_key", "n8n_hmac_secret", "owner_email", mode="before")
+    # --- account self-service: email, password reset, verification ---
+    #: Public base URL used to build the links inside outgoing mail. Falls back
+    #: to the request's own origin when unset.
+    app_base_url: str | None = None
+    #: Allow signing in with the email address as well as the username.
+    allow_email_login: bool = True
+    #: Whether a new self-service account must confirm its email before the
+    #: account is usable. Off by default so the platform works without a mail
+    #: server; the owner can require it once SMTP/Resend is configured.
+    require_email_verification: bool = False
+    password_reset_expire_minutes: int = 30
+    email_verify_expire_minutes: int = 1440
+
+    # --- mail delivery ---
+    #: "console" logs the message (and the link) instead of sending it, which is
+    #: the default so the platform runs with no mail server. Set MAIL_PROVIDER to
+    #: "smtp" or "resend" for real delivery.
+    mail_provider: Literal["console", "smtp", "resend"] = "console"
+    mail_from: str = "no-reply@yemen-legal.local"
+    mail_from_name: str = "المنصة القانونية الذكية"
+    mail_timeout_seconds: float = 10.0
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_username: str | None = None
+    smtp_password: str | None = None
+    smtp_use_tls: bool = True
+    resend_api_key: str | None = None
+
+    # --- Google sign-in (optional) ---
+    #: When both are set, the "continue with Google" button is shown and the
+    #: OAuth callback is enabled. Left empty, Google sign-in is simply absent.
+    google_client_id: str | None = None
+    google_client_secret: str | None = None
+    google_redirect_uri: str | None = None
+
+    @field_validator(
+        "llm_api_key",
+        "n8n_hmac_secret",
+        "owner_email",
+        "app_base_url",
+        "smtp_host",
+        "smtp_username",
+        "smtp_password",
+        "resend_api_key",
+        "google_client_id",
+        "google_client_secret",
+        "google_redirect_uri",
+        mode="before",
+    )
     @classmethod
     def _blank_to_none(cls, v: object) -> object:
         return None if isinstance(v, str) and not v.strip() else v
+
+    @property
+    def google_enabled(self) -> bool:
+        return bool(self.google_client_id and self.google_client_secret)
 
     @property
     def database_enabled(self) -> bool:

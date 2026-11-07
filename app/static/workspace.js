@@ -76,6 +76,7 @@
           <button class="ghost sm" id="logoutBtn">خروج</button>
         </div>
         <div class="ws-log" id="log"></div>
+        <div id="verifyBanner" class="hide"></div>
         <div class="ws-composer">
           <form id="composer">
             <div class="composer-box">
@@ -152,9 +153,34 @@
     if (!P.auth.guardPage(STATE.user)) return;
     document.getElementById("userChip").textContent =
       (STATE.user.full_name || STATE.user.username) + " · " + (STATE.user.role_label_ar || STATE.user.role);
+    renderVerifyBanner();
     renderEmpty();
     renderContext();
     await loadConversations();
+  }
+
+  // Offer a one-click resend while the address is still unconfirmed.
+  function renderVerifyBanner() {
+    const box = document.getElementById("verifyBanner");
+    if (!STATE.user || !STATE.user.email || STATE.user.email_verified) return;
+    box.className = "warn";
+    box.style.margin = "10px 18px";
+    box.textContent = "بريدك الإلكتروني (" + STATE.user.email + ") غير مؤكَّد بعد. ";
+    const btn = document.createElement("button");
+    btn.className = "ghost sm";
+    btn.textContent = "إعادة إرسال رابط التأكيد";
+    btn.style.marginInlineStart = "10px";
+    btn.onclick = async () => {
+      btn.disabled = true;
+      try {
+        const result = await P.auth.resendVerification();
+        P.toast(result.message || "تم إرسال رابط التأكيد.");
+      } catch (e) {
+        P.toast(e.message);
+      }
+      btn.disabled = false;
+    };
+    box.appendChild(btn);
   }
 
   async function doLogin() {
