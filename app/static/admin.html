@@ -99,13 +99,14 @@
   <!-- التطبيق -->
   <div id="app" class="hidden">
     <div class="tabs">
-      <button data-tab="sections" class="active">الأقسام</button>
-      <button data-tab="laws">القوانين</button>
-      <button data-tab="articles">المواد</button>
-      <button data-tab="users">المستخدمون والصلاحيات</button>
-      <button data-tab="roles">الأدوار</button>
-      <button data-tab="monitor">مراقبة النظام</button>
-      <button data-tab="backup">النسخة الاحتياطية</button>
+      <button data-tab="sections" data-perm="sections.read" class="active">الأقسام</button>
+      <button data-tab="laws" data-perm="laws.read">القوانين</button>
+      <button data-tab="articles" data-perm="articles.read">المواد</button>
+      <button data-tab="users" data-perm="users.read">المستخدمون والصلاحيات</button>
+      <button data-tab="roles" data-perm="sections.read">الأدوار</button>
+      <button data-tab="pages" data-perm="portal.admin">صلاحيات الصفحات</button>
+      <button data-tab="monitor" data-perm="users.read">مراقبة النظام</button>
+      <button data-tab="backup" data-perm="backup.manage">النسخة الاحتياطية</button>
     </div>
 
     <!-- الأقسام -->
@@ -206,6 +207,17 @@
       <div class="card"><h2>أدوار المنصة وصلاحياتها</h2><div id="rolesBox"></div></div>
     </section>
 
+    <!-- صلاحيات الصفحات -->
+    <section id="tab-pages" class="hidden">
+      <div class="card">
+        <h2>صلاحيات الصفحات لكل دور (نمط Harvey)</h2>
+        <p class="muted">كل صفحة محمية بصلاحية واحدة. المالك يملك كل الصلاحيات دائماً،
+          ويمكن منح أي دور صلاحية صفحة إضافية من تبويب «المستخدمون والصلاحيات».
+          الحماية مفروضة على الخادم قبل تقديم الصفحة، وتُطبَّق أيضاً داخل المتصفح.</p>
+        <div id="pagesBox"></div>
+      </div>
+    </section>
+
     <!-- مراقبة النظام -->
     <section id="tab-monitor" class="hidden">
       <div class="card"><h2>حالة النظام</h2><div id="monOverview" class="muted">جارٍ التحميل…</div></div>
@@ -302,16 +314,52 @@ async function login(){
   finally{ $('#loginBtn').disabled = false; }
 }
 function logout(){ TOKEN=''; ME=null; sessionStorage.removeItem('legal_token');
+  // The session cookie is HttpOnly, so ask the API to clear it before returning
+  // to the login page; the UI is reset immediately either way.
+  fetch('/api/v1/auth/logout', {method:'POST'}).finally(() => {
+    location.href = '/ui/login.html';
+  });
   $('#app').classList.add('hidden'); $('#loginCard').classList.remove('hidden');
   $('#logoutBtn').classList.add('hidden'); $('#whoami').textContent=''; }
 
 async function start(){
   ME = await api('/auth/me');
+  // Per-page gate (Harvey-style): only a role holding portal.admin may use the
+  // console. The server already refuses to serve the page; this is the second
+  // line of defence and keeps the UI honest if the token is reused elsewhere.
+  if (ME.role !== 'owner' && !(ME.effective_permissions||[]).includes('portal.admin')) {
+    location.replace('/ui/forbidden.html');
+    return;
+  }
   $('#loginCard').classList.add('hidden');
   $('#app').classList.remove('hidden');
   $('#logoutBtn').classList.remove('hidden');
   $('#whoami').innerHTML = `${esc(ME.full_name||ME.username)} <span class="pill ${ME.role}">${ROLE_AR[ME.role]||ME.role}</span>`;
-  await Promise.all([loadSections(), loadLaws(), loadUsers(), loadRoles()]);
+  applyTabPermissions();
+  // Load only what this role may read; a loader for a hidden tab would 403.
+  const jobs = [];
+  if (can('sections.read')) jobs.push(loadSections());
+  if (can('laws.read')) jobs.push(loadLaws());
+  if (can('users.read')) jobs.push(loadUsers());
+  if (can('sections.read')) jobs.push(loadRoles());
+  if (can('portal.admin')) jobs.push(loadPagePerms());
+  await Promise.all(jobs);
+}
+
+// Hide the console tabs this role cannot use, then open the first one it can.
+// The server enforces the same permissions on every endpoint, so a hidden tab
+// is a convenience, never the only defence.
+function can(permission){
+  return ME && (ME.role === 'owner' || (ME.effective_permissions||[]).includes(permission));
+}
+function applyTabPermissions(){
+  let first = null;
+  document.querySelectorAll('.tabs button').forEach(b => {
+    const ok = can(b.dataset.perm);
+    b.classList.toggle('hidden', !ok);
+    if (ok && !first) first = b.dataset.tab;
+  });
+  if (first) showTab(first);
 }
 
 // --- الأقسام ---
@@ -453,13 +501,33 @@ async function loadRoles(){
     </div>`).join('');
 }
 
+// --- صلاحيات الصفحات ---
+async function loadPagePerms(){
+  try{
+    const data = await api('/admin/page-permissions');
+    const pages = data.pages || [];
+    const roles = data.roles || [];
+    const head = '<tr><th>الصفحة</th>' + roles.map(r => `<th>${esc(r.label_ar||r.role)}</th>`).join('') + '</tr>';
+    const rows = pages.map(p => {
+      const cells = roles.map(r => {
+        const ok = r.role === 'owner' || (r.permissions||[]).includes(p.permission);
+        return `<td style="text-align:center">${ok ? '✅' : '⛔'}</td>`;
+      }).join('');
+      return `<tr><td><b>${esc(p.title_ar)}</b><br><span class="mono">${esc(p.path)}</span>
+        <br><span class="muted">${esc(p.permission)}</span></td>${cells}</tr>`;
+    }).join('');
+    $('#pagesBox').innerHTML = `<table>${head}${rows}</table>`;
+  }catch(e){ $('#pagesBox').innerHTML = `<span class="muted">${esc(e.message)}</span>`; }
+}
+
 // --- التبويبات ---
 function showTab(name){
-  ['sections','laws','articles','users','roles','monitor','backup'].forEach(t =>
+  ['sections','laws','articles','users','roles','pages','monitor','backup'].forEach(t =>
     $('#tab-' + t).classList.toggle('hidden', t !== name));
   document.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab===name));
   if (name === 'monitor') loadMonitor();
   if (name === 'backup') loadBackup();
+  if (name === 'pages') loadPagePerms();
 }
 document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => showTab(b.dataset.tab));
 
@@ -571,7 +639,9 @@ async function restoreBackup(dryRun){
   finally{ btn.disabled = false; }
 }
 
-if (TOKEN) start().catch(() => logout());
+// The server gated this page, so a session exists as either a stored token or
+// the session cookie; try to resume it before showing the login form.
+start().catch(() => logout());
 </script>
 <script src="/ui/install.js"></script>
 </body>

@@ -29,6 +29,7 @@ from app.api.deps import AdminDep, CurrentUserDep, require_permission
 from app.schemas.auth import SectionCreate, SectionOut, SectionUpdate
 from app.schemas.common import LegalSourceType
 from app.schemas.legal import LegalDocumentUpdate
+from app.services.portal import page_permission_matrix
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -56,6 +57,16 @@ class IngestLawRequest(BaseModel):
 @router.get("/overview", summary="نظرة عامة على حالة النظام (لوحة المشرف)")
 async def overview(admin: AdminDep, user: CurrentUserDep) -> dict:
     return await admin.overview(user)
+
+
+@router.get(
+    "/page-permissions",
+    summary="صلاحيات الصفحات لكل دور (نمط Harvey)",
+    description="يرجع كل صفحة محمية والصلاحية التي تفتحها، مع صلاحيات كل دور.",
+    dependencies=[Depends(require_permission("portal.admin"))],
+)
+async def page_permissions() -> dict:
+    return page_permission_matrix()
 
 
 @router.get("/audit", summary="سجل التدقيق ومراقبة الطلبات")

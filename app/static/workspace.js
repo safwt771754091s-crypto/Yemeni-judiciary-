@@ -147,13 +147,9 @@
       input.style.height = Math.min(input.scrollHeight, 160) + "px";
     });
 
-    if (!P.api.token()) {
-      document.getElementById("wsShell").style.display = "none";
-      document.getElementById("loginWrap").style.display = "flex";
-      return;
-    }
     STATE.user = await P.auth.requireSession();
     if (!STATE.user) return;
+    if (!P.auth.guardPage(STATE.user)) return;
     document.getElementById("userChip").textContent =
       (STATE.user.full_name || STATE.user.username) + " · " + (STATE.user.role_label_ar || STATE.user.role);
     renderEmpty();

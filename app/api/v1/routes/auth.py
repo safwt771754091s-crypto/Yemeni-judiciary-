@@ -12,9 +12,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Response, status
 
 from app.api.deps import AuthDep, CurrentUserDep, require_permission
+from app.api.pages import clear_session_cookie, set_session_cookie
 from app.core.config import settings
 from app.core.permissions import (
     ALL_PERMISSIONS,
@@ -69,9 +70,10 @@ async def signup_options() -> dict[str, Any]:
         "الأدوار المتاحة هي البوابات المهنية فقط، ولا يمكن إنشاء حساب مالك أو مدير."
     ),
 )
-async def signup(payload: SignupRequest, auth: AuthDep) -> SignupResponse:
+async def signup(payload: SignupRequest, auth: AuthDep, response: Response) -> SignupResponse:
     created = await auth.register(payload.model_dump())
     token, expires_in = auth.issue_token(created)
+    set_session_cookie(response, token)
     portal = ROLE_PORTALS.get(Role(created["role"]), {})
     return SignupResponse(
         access_token=token,
@@ -86,16 +88,31 @@ async def signup(payload: SignupRequest, auth: AuthDep) -> SignupResponse:
     "/login",
     response_model=TokenResponse,
     summary="تسجيل الدخول",
-    description="يستبدل اسم المستخدم وكلمة المرور برمز دخول صالح لمدة محددة.",
+    description=(
+        "يستبدل اسم المستخدم وكلمة المرور برمز دخول صالح لمدة محددة. "
+        "يُضبط أيضاً ملف ارتباط (HttpOnly cookie) ليتمكن الخادم من حماية صفحات البوابات."
+    ),
 )
-async def login(payload: LoginRequest, auth: AuthDep) -> TokenResponse:
+async def login(payload: LoginRequest, auth: AuthDep, response: Response) -> TokenResponse:
     user = await auth.authenticate(payload.username, payload.password)
     token, expires_in = auth.issue_token(user)
+    set_session_cookie(response, token)
     return TokenResponse(
         access_token=token,
         expires_in=expires_in,
         user=UserOut(**{k: user[k] for k in UserOut.model_fields if k in user}),
     )
+
+
+@router.post(
+    "/logout",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
+    summary="تسجيل الخروج",
+    description="يحذف ملف الارتباط (cookie) الخاص بالجلسة.",
+)
+async def logout(response: Response) -> None:
+    clear_session_cookie(response)
 
 
 @router.get(

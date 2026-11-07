@@ -383,8 +383,9 @@ async def test_permission_catalogue_and_roles(client: httpx.AsyncClient) -> None
 # --------------------------------------------------------------------------- #
 # The admin console is served
 # --------------------------------------------------------------------------- #
-async def test_admin_console_is_served(client: httpx.AsyncClient) -> None:
-    response = await client.get("/ui/admin.html")
+async def test_admin_console_is_served(client: httpx.AsyncClient, owner_token: str) -> None:
+    # The console is behind the page gate; with the owner's session it is served.
+    response = await client.get("/ui/admin.html", headers=_auth(owner_token))
     assert response.status_code == 200
     assert "لوحة تحكم المنصة" in response.text
 

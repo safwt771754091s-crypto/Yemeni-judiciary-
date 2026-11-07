@@ -286,7 +286,11 @@ async function login(){
   finally{ $("loginBtn").disabled = false; }
 }
 function show(el, msg){ el.textContent = msg; el.classList.remove("hide"); }
-function logout(){ TOKEN=""; localStorage.removeItem("lai_token"); $("app").classList.add("hide"); $("loginCard").classList.remove("hide"); }
+function logout(){
+  TOKEN=""; localStorage.removeItem("lai_token");
+  fetch("/api/v1/auth/logout", {method:"POST"});
+  $("app").classList.add("hide"); $("loginCard").classList.remove("hide");
+}
 
 function enterApp(){
   $("loginCard").classList.add("hide");
@@ -305,7 +309,11 @@ async function loadOcr(){
     }
   }catch(e){}
 }
-function auth(){ return {"Authorization": "Bearer " + TOKEN}; }
+function auth(){
+  // API token when present, otherwise rely on the HttpOnly session cookie
+  // (sent automatically for same-origin requests).
+  return TOKEN ? {"Authorization": "Bearer " + TOKEN} : {};
+}
 
 /* ---------- files ---------- */
 const drop = $("drop"), fileInput = $("fileInput");
@@ -541,10 +549,9 @@ function mdToHtml(md){
 $("loginBtn").onclick = login;
 $("p").addEventListener("keydown", e => { if(e.key==="Enter") login(); });
 $("logout").onclick = logout;
-if(TOKEN){
-  // validate the stored token before showing the app
-  fetch("/api/v1/auth/me", {headers: auth()}).then(r => r.ok ? enterApp() : logout()).catch(logout);
-}
+// The server already gated this page, so a session exists either as a stored
+// token or as the session cookie; confirm it before showing the app.
+fetch("/api/v1/auth/me", {headers: auth()}).then(r => r.ok ? enterApp() : logout()).catch(logout);
 </script>
 <script src="/ui/install.js"></script>
 </body>
