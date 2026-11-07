@@ -37,5 +37,12 @@ def test_auto_merge_is_gated_on_the_ci_workflow_result() -> None:
 
 def test_auto_merge_only_touches_dependabot_pull_requests() -> None:
     workflow = AUTO_MERGE.read_text(encoding="utf-8")
+    # `gh pr list --json author` reports Dependabot as "app/dependabot", while
+    # the REST API reports "dependabot[bot]". Both must be accepted, otherwise
+    # the merge never fires (a regression that shipped once).
     assert 'author.login == \\"dependabot[bot]\\"' in workflow
+    assert 'author.login == \\"app/dependabot\\"' in workflow
+    # The branch prefix is what actually distinguishes Dependabot; a spoofed
+    # author name alone must not be enough to get merged.
+    assert 'startswith(\\"dependabot/\\")' in workflow
     assert "gh pr merge" in workflow and "--squash" in workflow

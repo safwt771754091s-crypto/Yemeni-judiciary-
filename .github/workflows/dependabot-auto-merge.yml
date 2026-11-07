@@ -48,9 +48,15 @@ jobs:
           set -uo pipefail
 
           # The open pull request whose head is the commit CI just tested.
+          #
+          # `gh pr list --json author` reports Dependabot's login as
+          # "app/dependabot" (GraphQL), while the REST API reports
+          # "dependabot[bot]". Accept both so the match does not depend on which
+          # API answers, and require the branch prefix Dependabot always uses so
+          # a human cannot be merged by spoofing an author name.
           pr_number=$(gh pr list --repo "$REPO" --state open \
-            --json number,headRefOid,author \
-            --jq ".[] | select(.headRefOid == \"$HEAD_SHA\" and .author.login == \"dependabot[bot]\") | .number" \
+            --json number,headRefOid,headRefName,author \
+            --jq ".[] | select(.headRefOid == \"$HEAD_SHA\") | select((.author.login == \"dependabot[bot]\" or .author.login == \"app/dependabot\") and (.headRefName | startswith(\"dependabot/\"))) | .number" \
             | head -n1)
 
           if [ -z "${pr_number:-}" ]; then
