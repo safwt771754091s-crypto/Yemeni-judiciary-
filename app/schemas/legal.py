@@ -109,6 +109,25 @@ class RetrievalResponse(BaseModel):
     latency_ms: float | None = None
 
 
+class ArticleSearchQuery(BaseModel):
+    """Public statute lookup by article number and/or a text fragment."""
+
+    query: str | None = Field(default=None, max_length=400, description="جزء من نص المادة")
+    article_number: str | None = Field(
+        default=None, max_length=20, description="رقم المادة (يقبل الأرقام العربية)"
+    )
+    source_types: list[LegalSourceType] | None = None
+    limit: int = Field(default=20, ge=1, le=100)
+
+
+class ArticleSearchResponse(BaseModel):
+    query: str | None = None
+    article_number: str | None = None
+    results: list[RetrievedArticle]
+    count: int
+    latency_ms: float | None = None
+
+
 class IngestTextRequest(BaseModel):
     document: LegalDocumentCreate
     text: str = Field(min_length=10)

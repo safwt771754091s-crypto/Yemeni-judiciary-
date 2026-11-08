@@ -156,19 +156,20 @@ SIGNUP_DEFAULT_ROLE=viewer
 
 ### 3.3 تهيئة قاعدة البيانات (pgvector)
 
-في **Supabase → SQL Editor** نفّذ الملفين بالترتيب:
+في **Supabase → SQL Editor** نفّذ الملفات بالترتيب:
 
 ```sql
--- 1) المخطط والجداول والفهارس
---    انسخ محتوى sql/001_init_pgvector.sql والصقه
--- 2) الدوال (بحث هجين، تطبيع عربي، upsert)
---    انسخ محتوى sql/002_functions.sql والصقه
+-- 1) المخطط والجداول والفهارس        → sql/001_init_pgvector.sql
+-- 2) الدوال (بحث هجين، تطبيع، upsert) → sql/002_functions.sql
+-- 3) المصادقة والصلاحيات              → sql/003_auth_rbac.sql
+-- … وبقية ملفات sql/ بالترتيب الرقمي
+-- 8) البحث في المواد برقم/نص          → sql/008_article_search.sql
 ```
 
-أو من الطرفية:
+أو من الطرفية (ينفّذ كل ملفات `sql/*.sql` بالترتيب، وكلها idempotent):
 
 ```bash
-python scripts/apply_sql.py          # ينفّذ 001 ثم 002 عبر SUPABASE_DB_URL
+python scripts/apply_sql.py          # ينفّذ 001 … 008 عبر SUPABASE_DB_URL
 ```
 
 تأكّد من وجود امتداد `vector`: في Supabase → Database → Extensions → فعّل `vector`.
@@ -572,6 +573,35 @@ curl -X POST http://localhost:8000/api/v1/retrieval/search \
   -d '{"query": "إلزام المدين بأداء الثمن والتعويض عن الإخلال بالعقد", "top_k": 5}'
 ```
 
+### البحث في المواد برقم المادة أو بجزء من نصها (يعمل بدون إنترنت)
+
+بحث حتمي لا يحتاج إلى متجهات: يطابق رقم المادة (يقبل الأرقام العربية ٠-٩،
+ويتجاهل الأصفار البادئة) أو يطابق جزءاً من نصها حسب تقاطع الكلمات بعد التطبيع
+العربي. لذلك يعمل حتى لو تعذّر الوصول إلى موديل المتجهات.
+
+```bash
+# برقم المادة
+curl "http://localhost:8000/api/v1/retrieval/articles?number=146&limit=5"
+
+# بالأرقام العربية
+curl "http://localhost:8000/api/v1/retrieval/articles?number=%D9%A2%D9%A5"
+
+# بجزء من النص
+curl "http://localhost:8000/api/v1/retrieval/articles?q=%D8%A7%D9%84%D8%A8%D9%8A%D9%86%D8%A9%20%D8%B9%D9%84%D9%89%20%D8%A7%D9%84%D9%85%D8%AF%D8%B9%D9%8A"
+
+# بحث مركّب مع تحديد نوع القانون
+curl -X POST http://localhost:8000/api/v1/retrieval/articles \
+  -H "Content-Type: application/json" \
+  -d '{"article_number": "146", "source_types": ["civil_law"], "limit": 10}'
+```
+
+**العمل بدون إنترنت:** يرفق الموقع فهرساً ثابتاً للمواد في
+`app/static/legal-index.json` (يُبنى بالأمر
+`python scripts/build_search_index.py`). يخزّنه Service Worker في الجهاز،
+وتبحث الصفحة الرئيسية فيه مباشرة عند انقطاع الشبكة، ثم تدمج النتائج مع نتائج
+الخادم عند توفر الاتصال. يعكس مُطبِّع البحث في المتصفح
+`app/core/text_utils.normalize_arabic` حرفياً، فيتطابق الترتيب بين الوضعين.
+
 ### إحصاءات المدونة
 
 ```bash
@@ -685,6 +715,8 @@ http://localhost:8000/ui/intake.html
 | GET | `/api/v1/ingestion/stats` | إحصاءات المدونة |
 | POST | `/api/v1/retrieval/search` | بحث هجين في المواد |
 | GET | `/api/v1/retrieval/search?q=...` | بحث سريع |
+| GET | `/api/v1/retrieval/articles?number=…&q=…` | بحث في المواد برقم المادة أو بجزء من نصها (بدون متجهات، يعمل بدون إنترنت) |
+| POST | `/api/v1/retrieval/articles` | نفس البحث بصيغة JSON |
 | **POST** | **`/api/v1/cases/intake`** | **استلام قضية من ملفات مرفوعة: استخراج + تفصيل + تصنيف + مسودة حكم** |
 | POST | `/api/v1/cases/classify` | تصنيف دعوى من نصها (مدني/جنائي/تجاري/…) |
 | POST | `/api/v1/cases/extract` | تفصيل دعوى من نصها (الأطراف والطلبات والدفوع) |

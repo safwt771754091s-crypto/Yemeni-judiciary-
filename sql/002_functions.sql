@@ -45,6 +45,21 @@ returns text language sql immutable as $$
 $$;
 
 -- ---------------------------------------------------------------------------
+-- Canonical form of an article number for exact matching: Arabic-Indic digits
+-- to Western, drop every non-digit, and strip leading zeros. This is the SQL
+-- counterpart of ``_digits_only`` in app/db/vector_store.py and of
+-- ``digitsOnly`` in app/static/statute-search.js, so "١٤٦", "146" and "0146"
+-- all resolve to the same article in every mode.
+-- ---------------------------------------------------------------------------
+create or replace function normalize_article_number(txt text)
+returns text language sql immutable as $$
+  select ltrim(
+    regexp_replace(normalize_digits(coalesce(txt, '')), '\D', '', 'g'),
+    '0'
+  )
+$$;
+
+-- ---------------------------------------------------------------------------
 -- Hybrid search: dense (cosine) + lexical (Arabic FTS + trigram), fused with
 -- Reciprocal Rank Fusion.  Returns the most relevant Yemeni legal articles.
 -- ---------------------------------------------------------------------------
@@ -167,9 +182,9 @@ language sql stable as $$
     select a.id, d.title_ar, d.law_number, a.article_number, a.article_label, a.content_ar
     from legal_articles a
     join legal_documents d on d.id = a.document_id
-    where regexp_replace(normalize_digits(p_article_number), '\D', '', 'g') <> ''
-      and regexp_replace(normalize_digits(a.article_number), '\D', '', 'g') =
-          regexp_replace(normalize_digits(p_article_number), '\D', '', 'g')
+    where normalize_article_number(p_article_number) <> ''
+      and normalize_article_number(a.article_number) =
+          normalize_article_number(p_article_number)
       and (p_source_type is null or a.source_type::text = p_source_type)
     order by a.chunk_index
     limit p_limit;

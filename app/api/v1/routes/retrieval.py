@@ -7,7 +7,12 @@ from fastapi import APIRouter, Query
 
 from app.api.deps import RetrievalDep
 from app.schemas.common import LegalSourceType
-from app.schemas.legal import RetrievalQuery, RetrievalResponse
+from app.schemas.legal import (
+    ArticleSearchQuery,
+    ArticleSearchResponse,
+    RetrievalQuery,
+    RetrievalResponse,
+)
 
 router = APIRouter(prefix="/retrieval", tags=["retrieval"])
 
@@ -37,6 +42,60 @@ async def search_get(
     )
     return RetrievalResponse(
         query=q,
+        results=results,
+        count=len(results),
+        latency_ms=round((time.perf_counter() - started) * 1000, 2),
+    )
+
+
+@router.get(
+    "/articles",
+    response_model=ArticleSearchResponse,
+    summary="بحث في المواد القانونية برقم المادة أو جزء من نصها",
+)
+async def search_articles(
+    service: RetrievalDep,
+    number: str | None = Query(
+        default=None, max_length=20, description="رقم المادة (يقبل الأرقام العربية)"
+    ),
+    q: str | None = Query(default=None, max_length=400, description="جزء من نص المادة"),
+    limit: int = Query(default=20, ge=1, le=100),
+    source_type: list[LegalSourceType] | None = Query(default=None),
+) -> ArticleSearchResponse:
+    started = time.perf_counter()
+    results = await service.search_articles(
+        query=q,
+        article_number=number,
+        source_types=[s.value for s in source_type] if source_type else None,
+        limit=limit,
+    )
+    return ArticleSearchResponse(
+        query=q,
+        article_number=number,
+        results=results,
+        count=len(results),
+        latency_ms=round((time.perf_counter() - started) * 1000, 2),
+    )
+
+
+@router.post(
+    "/articles",
+    response_model=ArticleSearchResponse,
+    summary="بحث في المواد القانونية (POST)",
+)
+async def search_articles_post(
+    payload: ArticleSearchQuery, service: RetrievalDep
+) -> ArticleSearchResponse:
+    started = time.perf_counter()
+    results = await service.search_articles(
+        query=payload.query,
+        article_number=payload.article_number,
+        source_types=[s.value for s in payload.source_types] if payload.source_types else None,
+        limit=payload.limit,
+    )
+    return ArticleSearchResponse(
+        query=payload.query,
+        article_number=payload.article_number,
         results=results,
         count=len(results),
         latency_ms=round((time.perf_counter() - started) * 1000, 2),
