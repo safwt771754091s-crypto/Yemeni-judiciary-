@@ -83,6 +83,24 @@ class VectorStore(Protocol):
         """
         ...
 
+    async def search_articles(
+        self,
+        *,
+        query: str | None = None,
+        article_number: str | None = None,
+        source_types: list[str] | None = None,
+        limit: int = 20,
+    ) -> list[RetrievedArticle]:
+        """Deterministic article lookup by number and/or a text fragment.
+
+        Unlike :meth:`search` this needs no embedding: it matches the article
+        number exactly (digits only, so "٥" and "5" agree) and the text by
+        normalized term overlap. That is what powers the public "search the
+        statutes" box, which must also work when no embedding model is
+        reachable.
+        """
+        ...
+
     async def corpus_stats(self) -> list[dict[str, Any]]: ...
 
     async def document_exists(self, source_type: str, law_number: str | None, year: int | None) -> str | None: ...
@@ -200,6 +218,37 @@ class PgVectorStore:
     async def corpus_stats(self) -> list[dict[str, Any]]:
         rows = await database.fetch("select * from legal_corpus_stats()")
         return [dict(r) for r in rows]
+
+    async def search_articles(
+        self,
+        *,
+        query: str | None = None,
+        article_number: str | None = None,
+        source_types: list[str] | None = None,
+        limit: int = 20,
+    ) -> list[RetrievedArticle]:
+        """Number + text lookup, served by the ``search_legal_articles`` function.
+
+        Kept in Postgres so the public search box gets the same digits-only
+        number match and normalized-term overlap as the in-memory store without
+        shipping the whole corpus to the client.
+        """
+        if not (query and query.strip()) and not (article_number and article_number.strip()):
+            return []
+        rows = await database.fetch(
+            "select * from search_legal_articles($1,$2,$3::text[],$4)",
+            query,
+            article_number,
+            source_types,
+            limit,
+        )
+        articles: list[RetrievedArticle] = []
+        for row in rows:
+            data = dict(row)
+            data.setdefault("similarity", 1.0)
+            data.setdefault("fused_score", 1.0)
+            articles.append(_row_to_article(data))
+        return articles
 
     async def document_exists(self, source_type: str, law_number: str | None, year: int | None) -> str | None:
         row = await database.fetchrow(
@@ -573,10 +622,17 @@ def _clamp(value: float) -> float:
 
 
 def _digits_only(value: str) -> str:
-    """Reduce an article number to its digits, in Western form."""
-    return "".join(
+    """Reduce an article number to its digits, in Western form.
+
+    Arabic-Indic digits become Western ones, every non-digit is dropped, and
+    leading zeros are stripped, so "١٤٦", "146" and "0146" all compare equal.
+    Mirrored by ``normalize_article_number`` in sql/002_functions.sql and by
+    ``digitsOnly`` in app/static/statute-search.js.
+    """
+    converted = "".join(
         str("٠١٢٣٤٥٦٧٨٩".index(c)) if c in "٠١٢٣٤٥٦٧٨٩" else c for c in (value or "")
-    ).replace(" ", "").lstrip("0") or ""
+    )
+    return "".join(c for c in converted if c in "0123456789").lstrip("0")
 
 
 def _chunk_to_article(
@@ -744,6 +800,57 @@ class InMemoryVectorStore:
                 fused_score=1.0,
             )
             for chunk in matches[:limit]
+        ]
+
+    async def search_articles(
+        self,
+        *,
+        query: str | None = None,
+        article_number: str | None = None,
+        source_types: list[str] | None = None,
+        limit: int = 20,
+    ) -> list[RetrievedArticle]:
+        """Deterministic lookup by article number and/or text fragment.
+
+        Mirrors the SQL ``search_legal_articles`` function so the offline search
+        box ranks exactly like the online one: an exact number match always
+        outranks a text hit, and text hits are ordered by normalized-term
+        overlap (the same lexical score hybrid retrieval uses).
+        """
+        target = _digits_only(article_number or "")
+        query_norm = normalize_arabic(query or "")
+        terms = {t for t in query_norm.split() if len(t) > 1}
+        if not target and not terms:
+            return []
+
+        scored: list[tuple[int, float, dict[str, Any]]] = []
+        for chunk in self.chunks.values():
+            if source_types and chunk["source_type"] not in source_types:
+                continue
+            number_match = bool(target) and _digits_only(
+                chunk.get("article_number") or ""
+            ) == target
+            if target and not number_match:
+                # A number was supplied, so only that number is wanted.
+                continue
+            lexical = _lexical_score(terms, chunk.get("content_norm") or "") if terms else 0.0
+            if terms and not number_match and lexical <= 0.0:
+                continue
+            scored.append((1 if number_match else 0, lexical, chunk))
+
+        # Number matches first, then by text relevance, then by reading order.
+        scored.sort(
+            key=lambda item: (item[0], item[1], -item[2].get("chunk_index", 0)),
+            reverse=True,
+        )
+        return [
+            _chunk_to_article(
+                chunk,
+                self.documents.get(chunk["document_id"], {}),
+                similarity=1.0 if number_match else min(1.0, lexical * 4),
+                fused_score=lexical,
+            )
+            for number_match, lexical, chunk in scored[:limit]
         ]
 
     async def corpus_stats(self) -> list[dict[str, Any]]:

@@ -33,6 +33,13 @@ jobs:
       - name: Lint
         run: python -m ruff check app scripts tests
 
+      - name: Offline search index is current
+        # The offline search box ships app/static/legal-index.json. Rebuild it
+        # and fail if it no longer matches the corpus, so the two cannot drift.
+        run: |
+          python scripts/build_search_index.py
+          git diff --exit-code app/static/legal-index.json
+
       - name: Run test-suite
         run: python -m pytest -q
 

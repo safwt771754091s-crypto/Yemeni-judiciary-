@@ -129,6 +129,41 @@
 
   .warn{background:#3a2b16;border:1px solid #6b5326;color:#f0d59a;border-radius:12px;
     padding:14px 18px;font-size:13.5px;margin:0 0 8px}
+
+  /* -- statute search ---------------------------------------------------- */
+  .search{background:linear-gradient(180deg,var(--panel2),var(--panel));border:1px solid var(--line);
+    border-radius:18px;padding:26px}
+  .search .head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px}
+  .search .head h2{margin:0;font-size:21px;color:var(--gold2)}
+  .net{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);
+    border:1px solid var(--line);border-radius:20px;padding:3px 12px;background:#0e1721}
+  .net .dot{width:8px;height:8px;border-radius:50%;background:var(--ok)}
+  .net.off .dot{background:#e5a05f}
+  .sbox{display:grid;grid-template-columns:170px 1fr auto;gap:10px}
+  @media(max-width:760px){.sbox{grid-template-columns:1fr}}
+  .sbox input{background:var(--panel2);border:1px solid var(--line);color:var(--ink);
+    border-radius:11px;padding:13px 15px;font-family:inherit;font-size:15px}
+  .sbox input:focus{outline:none;border-color:var(--gold)}
+  .sbox button{background:linear-gradient(135deg,var(--gold),#a8823a);color:#12181f;border:0;
+    border-radius:11px;padding:13px 26px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit}
+  .sbox button:disabled{opacity:.55;cursor:wait}
+  .hint{color:var(--muted);font-size:12.5px;margin:10px 2px 0}
+  .sres{margin-top:18px;display:flex;flex-direction:column;gap:11px}
+  .sres .empty{color:var(--muted);font-size:14px;padding:14px 2px}
+  .art{background:#0e1721;border:1px solid var(--line);border-radius:13px;padding:15px 17px}
+  .art:hover{border-color:var(--gold)}
+  .art .top{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:8px}
+  .art .num{background:#1b2733;border:1px solid var(--line);color:var(--gold2);
+    border-radius:8px;padding:2px 11px;font-size:12.5px;font-weight:700}
+  .art .law{color:var(--ink);font-size:13px}
+  .art .src{color:var(--muted);font-size:11.5px}
+  .art .where{margin-inline-start:auto;font-size:10.5px;border-radius:20px;padding:2px 9px;
+    border:1px solid var(--line);color:var(--muted)}
+  .art .where.online{color:var(--ok);border-color:#2f6b47}
+  .art .where.offline{color:#e5c877;border-color:#6b5a26}
+  .art p{margin:0;font-size:14px;line-height:1.95;color:#dbe6f0;white-space:pre-wrap}
+  .art mark{background:#3a3218;color:var(--gold2);border-radius:4px;padding:0 2px}
+  .art a.more{display:inline-block;margin-top:8px;font-size:12px}
   footer{border-top:1px solid var(--line);color:var(--muted);font-size:13px;padding:30px 0}
   footer .in{max-width:1160px;margin:0 auto;padding:0 22px;display:flex;gap:16px;flex-wrap:wrap;align-items:center}
   footer .sp{flex:1}
@@ -140,6 +175,7 @@
   <div class="in">
     <div class="brand"><img src="/ui/icons/icon-192.png" alt=""><div>المنصة القانونية الذكية<small>الجمهورية اليمنية</small></div></div>
     <span class="sp"></span>
+    <a class="lnk" href="#search">البحث في المواد</a>
     <a class="lnk" href="#features">المزايا</a>
     <a class="lnk" href="#how">كيف تعمل</a>
     <a class="lnk" href="#portals">البوابات</a>
@@ -180,6 +216,29 @@
     </div>
   </div>
 </header>
+
+<section id="search" style="background:var(--bg2);border-block:1px solid var(--line)">
+  <div class="wrap">
+    <div class="search">
+      <div class="head">
+        <h2>🔎 البحث في المواد القانونية</h2>
+        <span class="net" id="netBadge"><span class="dot"></span><span id="netText">جارٍ التحميل…</span></span>
+      </div>
+      <div class="sbox">
+        <input id="sNum" type="search" inputmode="numeric" placeholder="رقم المادة (مثال: 146)"
+               aria-label="رقم المادة">
+        <input id="sText" type="search" placeholder="أو ابحث بجزء من نص المادة…"
+               aria-label="جزء من نص المادة">
+        <button id="sBtn" type="button">بحث</button>
+      </div>
+      <p class="hint">
+        اكتب رقم المادة، أو كلمة/عبارة من نصها، ثم اضغط «بحث». يعمل البحث بدون إنترنت
+        (فهرس مخزّن في جهازك) وبوجود الإنترنت (فهرس كامل من قاعدة البيانات)، وتُدمج النتيجتان.
+      </p>
+      <div class="sres" id="sResults" aria-live="polite"></div>
+    </div>
+  </div>
+</section>
 
 <section id="features">
   <div class="wrap">
@@ -288,6 +347,7 @@
 </footer>
 
 <script src="/ui/install.js"></script>
+<script src="/ui/statute-search.js"></script>
 <script>
   PWAInstall.wireButton("#installBtn");
   PWAInstall.wireButton("#installBtn2");
@@ -306,6 +366,109 @@
     } catch (e) { document.getElementById("sReady").textContent = "غير متصلة"; }
   }
   loadStats();
+
+  // -- statute search -------------------------------------------------------
+  const SOURCE_LABELS = {
+    civil_law: "القانون المدني", commercial_law: "القانون التجاري",
+    evidence_law: "قانون الإثبات", civil_procedure: "قانون المرافعات المدنية",
+    criminal_law: "قانون الجرائم والعقوبات", criminal_procedure: "قانون الإجراءات الجزائية",
+    family_law: "قانون الأحوال الشخصية", labour_law: "قانون العمل",
+    constitution: "الدستور", executive_regulation: "اللائحة التنفيذية",
+    judicial_precedent: "مبدأ قضائي", fatwa: "فتوى", other: "أخرى",
+  };
+  const numInput = document.getElementById("sNum");
+  const textInput = document.getElementById("sText");
+  const btn = document.getElementById("sBtn");
+  const box = document.getElementById("sResults");
+  const netBadge = document.getElementById("netBadge");
+  const netText = document.getElementById("netText");
+
+  function refreshNet() {
+    const online = navigator.onLine !== false;
+    netBadge.classList.toggle("off", !online);
+    netText.textContent = online ? "متصل — فهرس كامل + محلي" : "بدون إنترنت — فهرس محلي";
+  }
+  window.addEventListener("online", refreshNet);
+  window.addEventListener("offline", refreshNet);
+  refreshNet();
+
+  function highlight(text, query) {
+    const esc = StatuteSearch.escapeHtml(text);
+    const terms = StatuteSearch.normalize(query).split(" ").filter((t) => t.length > 2);
+    if (!terms.length) return esc;
+    // Highlight on the raw text using a tolerant pattern, so diacritics and
+    // letter variants (أ/إ/آ, ى/ي) still light up.
+    let out = esc;
+    for (const term of terms) {
+      try {
+        out = out.replace(new RegExp("(" + StatuteSearch.tolerantPattern(term) + ")", "g"),
+          "<mark>$1</mark>");
+      } catch (e) { /* ignore a term that will not compile */ }
+    }
+    return out;
+  }
+
+  function renderResults(payload, query) {
+    box.innerHTML = "";
+    if (!payload.results.length) {
+      box.innerHTML = '<div class="empty">لا توجد نتائج مطابقة. جرّب رقماً آخر أو كلمة أقصر.</div>';
+      return;
+    }
+    const meta = document.createElement("p");
+    meta.className = "hint";
+    meta.style.margin = "0 2px 4px";
+    meta.textContent = payload.offline
+      ? `${payload.results.length} نتيجة من الفهرس المحلي (بدون إنترنت).`
+      : `${payload.results.length} نتيجة (${payload.localCount} محلي · ${payload.onlineCount} من الخادم).`;
+    box.appendChild(meta);
+
+    for (const r of payload.results) {
+      const card = document.createElement("div");
+      card.className = "art";
+      const label = SOURCE_LABELS[r.source_type] || r.source_type;
+      const where = r.origin === "online"
+        ? '<span class="where online">من الخادم</span>'
+        : '<span class="where offline">محلي</span>';
+      const link = r.source_url
+        ? `<a class="more" href="${StatuteSearch.escapeHtml(r.source_url)}" target="_blank" rel="noopener">المصدر الرسمي ↗</a>`
+        : "";
+      card.innerHTML =
+        '<div class="top">' +
+          `<span class="num">${StatuteSearch.escapeHtml(r.article_label)}</span>` +
+          `<span class="law">${StatuteSearch.escapeHtml(r.law_title)}</span>` +
+          `<span class="src">${StatuteSearch.escapeHtml(label)}</span>` +
+          where +
+        "</div>" +
+        `<p>${highlight(r.content, query)}</p>` + link;
+      box.appendChild(card);
+    }
+  }
+
+  async function runSearch() {
+    const number = numInput.value.trim();
+    const query = textInput.value.trim();
+    if (!number && query.length < 2) {
+      box.innerHTML = '<div class="empty">أدخل رقم مادة أو كلمتين على الأقل للبحث.</div>';
+      return;
+    }
+    btn.disabled = true;
+    box.innerHTML = '<div class="empty">جارٍ البحث…</div>';
+    try {
+      const payload = await StatuteSearch.search(number, query, 40);
+      renderResults(payload, query || number);
+    } catch (e) {
+      box.innerHTML = '<div class="empty">تعذّر تنفيذ البحث. حاول مرة أخرى.</div>';
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  btn.addEventListener("click", runSearch);
+  for (const input of [numInput, textInput]) {
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter") runSearch(); });
+  }
+  // Warm the offline index so the first search is instant and works offline.
+  StatuteSearch.loadIndex();
 </script>
 </body>
 </html>

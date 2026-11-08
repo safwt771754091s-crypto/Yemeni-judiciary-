@@ -267,6 +267,30 @@ class RetrievalService:
             min_similarity=query.min_similarity,
         )
 
+    async def search_articles(
+        self,
+        *,
+        query: str | None = None,
+        article_number: str | None = None,
+        source_types: list[str] | None = None,
+        limit: int = 20,
+    ) -> list[RetrievedArticle]:
+        """Public statute lookup by article number and/or a text fragment.
+
+        No embedding is involved, so this works even when the embedding model
+        is unreachable — which is what lets the search box answer offline.
+        """
+        number = (article_number or "").strip() or None
+        text = (query or "").strip() or None
+        if not number and not text:
+            return []
+        return await self.store.search_articles(
+            query=text,
+            article_number=number,
+            source_types=source_types,
+            limit=limit,
+        )
+
     async def retrieve_for_case(
         self,
         *,
