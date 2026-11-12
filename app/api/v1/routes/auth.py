@@ -10,13 +10,16 @@ DELETE /auth/users/{id} - delete a user
 """
 from __future__ import annotations
 
+import secrets
 from typing import Any
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, Query, Request, Response, status
+from fastapi.responses import RedirectResponse
 
 from app.api.deps import AuthDep, CurrentUserDep, require_permission
 from app.api.pages import clear_session_cookie, set_session_cookie
 from app.core.config import settings
+from app.core.logging import get_logger
 from app.core.permissions import (
     ALL_PERMISSIONS,
     ROLE_LABELS_AR,
@@ -25,8 +28,11 @@ from app.core.permissions import (
     Role,
 )
 from app.schemas.auth import (
+    ForgotPasswordRequest,
     LoginRequest,
+    MessageResponse,
     PermissionCatalogue,
+    ResetPasswordRequest,
     SignupRequest,
     SignupResponse,
     TokenResponse,
@@ -34,9 +40,23 @@ from app.schemas.auth import (
     UserOut,
     UserUpdate,
     UserWithPermissions,
+    VerifyEmailRequest,
 )
+from app.services.account import account_service
+from app.services.auth import auth_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+logger = get_logger(__name__)
+
+#: Session cookie value for the OAuth round-trip, checked on the callback so a
+#: third party cannot feed an authorization code to the endpoint.
+OAUTH_STATE_COOKIE = "legal_oauth_state"
+
+
+def _request_base(request: Request) -> str:
+    """The origin the caller reached us on, used to build links and redirects."""
+    return str(request.base_url).rstrip("/")
 
 
 @router.get(
@@ -70,8 +90,17 @@ async def signup_options() -> dict[str, Any]:
         "الأدوار المتاحة هي البوابات المهنية فقط، ولا يمكن إنشاء حساب مالك أو مدير."
     ),
 )
-async def signup(payload: SignupRequest, auth: AuthDep, response: Response) -> SignupResponse:
+async def signup(
+    payload: SignupRequest, auth: AuthDep, request: Request, response: Response
+) -> SignupResponse:
     created = await auth.register(payload.model_dump())
+    # Confirm the address when one was given; a missing mail server must never
+    # fail the signup, so delivery errors are logged, not raised.
+    if created.get("email"):
+        try:
+            await account_service.send_verification(created, request_base=_request_base(request))
+        except Exception as exc:  # signup must still succeed
+            logger.warning("verification email not sent", extra={"error": str(exc)})
     token, expires_in = auth.issue_token(created)
     set_session_cookie(response, token)
     portal = ROLE_PORTALS.get(Role(created["role"]), {})
@@ -113,6 +142,127 @@ async def login(payload: LoginRequest, auth: AuthDep, response: Response) -> Tok
 )
 async def logout(response: Response) -> None:
     clear_session_cookie(response)
+
+
+@router.post(
+    "/forgot-password",
+    response_model=MessageResponse,
+    summary="طلب إعادة تعيين كلمة المرور",
+    description=(
+        "يرسل رابط إعادة تعيين إلى البريد المسجَّل. الرد واحد دائماً سواء كان "
+        "البريد مسجَّلاً أم لا، حتى لا يمكن استخدام النقطة لمعرفة الحسابات الموجودة."
+    ),
+)
+async def forgot_password(
+    payload: ForgotPasswordRequest, request: Request
+) -> MessageResponse:
+    result = await account_service.request_password_reset(
+        payload.email, request_base=_request_base(request)
+    )
+    return MessageResponse(
+        message=result["message"],
+        link=result.get("reset_link"),
+        expires_in_minutes=result.get("expires_in_minutes"),
+    )
+
+
+@router.post(
+    "/reset-password",
+    response_model=MessageResponse,
+    summary="تعيين كلمة مرور جديدة برمز إعادة التعيين",
+)
+async def reset_password(payload: ResetPasswordRequest) -> MessageResponse:
+    await account_service.reset_password(payload.token, payload.password)
+    return MessageResponse(message="تم تعيين كلمة المرور بنجاح، يمكنك الدخول الآن.")
+
+
+@router.post(
+    "/verify-email",
+    response_model=MessageResponse,
+    summary="تأكيد البريد الإلكتروني برمز التحقق",
+)
+async def verify_email(payload: VerifyEmailRequest) -> MessageResponse:
+    await account_service.verify_email(payload.token)
+    return MessageResponse(message="تم تأكيد بريدك الإلكتروني بنجاح.")
+
+
+@router.post(
+    "/resend-verification",
+    response_model=MessageResponse,
+    summary="إعادة إرسال رسالة تأكيد البريد",
+    description="يرسل رابط تأكيد جديداً إلى بريد المستخدم الحالي.",
+)
+async def resend_verification(user: CurrentUserDep, request: Request) -> MessageResponse:
+    result = await account_service.send_verification(
+        user, request_base=_request_base(request)
+    )
+    return MessageResponse(message=result.get("message", "تم إرسال رسالة التأكيد."), link=result.get("verify_link"))
+
+
+@router.get(
+    "/google",
+    summary="عنوان تسجيل الدخول عبر جوجل",
+    description="يعيد ما إذا كان تسجيل الدخول عبر جوجل مُفعَّلاً على هذه المنصة.",
+)
+async def google_start() -> dict[str, Any]:
+    return {"enabled": account_service.google_enabled}
+
+
+@router.get(
+    "/google/authorize",
+    summary="بدء تسجيل الدخول عبر جوجل",
+)
+async def google_authorize(request: Request) -> Any:
+    if not account_service.google_enabled:
+        return RedirectResponse("/ui/login.html?error=google_disabled", status_code=302)
+    state = secrets.token_urlsafe(24)
+    response = RedirectResponse(
+        account_service.google_authorize_url(
+            state=state, request_base=_request_base(request)
+        ),
+        status_code=302,
+    )
+    response.set_cookie(
+        key=OAUTH_STATE_COOKIE,
+        value=state,
+        max_age=600,
+        httponly=True,
+        samesite="lax",
+        secure=settings.is_production,
+        path="/",
+    )
+    return response
+
+
+@router.get(
+    "/google/callback",
+    summary="عودة جوجل بعد تسجيل الدخول",
+)
+async def google_callback(
+    request: Request,
+    code: str | None = Query(default=None),
+    state: str | None = Query(default=None),
+    error: str | None = Query(default=None),
+) -> Any:
+    if error or not code:
+        return RedirectResponse("/ui/login.html?error=google_cancelled", status_code=302)
+    expected = request.cookies.get(OAUTH_STATE_COOKIE, "")
+    if not expected or not state or not secrets.compare_digest(expected, state):
+        return RedirectResponse("/ui/login.html?error=google_state", status_code=302)
+
+    claims = await account_service.exchange_google_code(
+        code, request_base=_request_base(request)
+    )
+    user = await account_service.login_with_google(
+        claims, request_base=_request_base(request)
+    )
+    token, _ = auth_service.issue_token(user)
+    portal = ROLE_PORTALS.get(Role(user["role"]), {})
+    target = portal.get("page") or "/ui/workspace.html"
+    response = RedirectResponse(target, status_code=302)
+    set_session_cookie(response, token)
+    response.delete_cookie(OAUTH_STATE_COOKIE, path="/")
+    return response
 
 
 @router.get(

@@ -107,6 +107,10 @@ PUBLIC_PAGES: frozenset[str] = frozenset(
         "/ui/offline.html",
         "/ui/login.html",
         "/ui/forbidden.html",
+        # Account self-service: reached from an email link, so no session yet.
+        "/ui/forgot.html",
+        "/ui/reset.html",
+        "/ui/verify.html",
     }
 )
 

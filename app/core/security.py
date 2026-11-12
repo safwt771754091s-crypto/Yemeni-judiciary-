@@ -56,6 +56,23 @@ def verify_password(password: str, stored: str) -> bool:
     return hmac.compare_digest(actual, expected)
 
 
+def validate_password_strength(password: str) -> None:
+    """Raise :class:`ValidationError` when a password is too weak.
+
+    Shared by signup, the owner's user-admin forms and password reset so the
+    policy can never drift between the paths that set a password.
+    """
+    if len(password) < 8:
+        raise ValidationError("كلمة المرور يجب أن تكون 8 أحرف على الأقل")
+    if password.isdigit() or password.isalpha():
+        raise ValidationError("كلمة المرور يجب أن تجمع بين الحروف والأرقام")
+
+
+def random_token(nbytes: int = 32) -> str:
+    """A URL-safe, high-entropy token for reset and verification links."""
+    return secrets.token_urlsafe(nbytes)
+
+
 # --------------------------------------------------------------------------- #
 # Tokens
 # --------------------------------------------------------------------------- #

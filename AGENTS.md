@@ -66,6 +66,30 @@ establishment; `db_command_timeout` (default 60s) bounds query execution. Pass
 designed to start degraded when the database is unreachable — never make
 startup depend on a successful connection.
 
+## Account self-service (reset, verification, Google)
+
+`app/services/account.py` owns password reset, email verification and Google
+sign-in; `app/services/mailer.py` delivers the mail. The suite stays offline
+because the default `MAIL_PROVIDER=console` logs the message instead of sending
+it, and the reset/verify links are returned in the API response outside
+production (`settings.is_production` false). `tests/test_account_selfservice.py`
+consumes those links, so it needs no mail server and no Google credentials.
+
+Rules to keep:
+
+- A password-reset request must answer the same way whether or not the address
+  is registered, so the endpoint cannot enumerate accounts.
+- Reset and verification tokens are stored hashed in `account_tokens` and are
+  single-use; never return a raw token except through the mail body.
+- Google sign-in is enabled only when `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`
+  are both set (`settings.google_enabled`); the login/signup pages hide the
+  button otherwise. An account is matched by `google_sub` first and by a
+  *verified* email second — an unverified claim that collides with a local
+  account is refused, never linked.
+- `REQUIRE_EMAIL_VERIFICATION` is off by default so the platform works with no
+  mail server. Turning it on makes `AuthService.authenticate` reject an
+  unconfirmed address with a 403.
+
 ## Layout
 
 - `app/core` — config, Arabic text normalisation, money parsing, security.

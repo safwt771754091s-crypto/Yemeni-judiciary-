@@ -14,6 +14,39 @@ class LoginRequest(BaseModel):
     password: str = Field(min_length=8, max_length=256)
 
 
+class ForgotPasswordRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=200)
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str = Field(min_length=10, max_length=400)
+    password: str = Field(min_length=8, max_length=256)
+
+    @field_validator("password")
+    @classmethod
+    def _password_strength(cls, v: str) -> str:
+        if len(v) < 8:
+            raise ValueError("كلمة المرور يجب أن تكون 8 أحرف على الأقل")
+        if v.isdigit() or v.isalpha():
+            raise ValueError("كلمة المرور يجب أن تجمع بين الحروف والأرقام")
+        return v
+
+
+class VerifyEmailRequest(BaseModel):
+    token: str = Field(min_length=10, max_length=400)
+
+
+class MessageResponse(BaseModel):
+    """A generic outcome for the self-service endpoints."""
+
+    ok: bool = True
+    message: str
+    #: Only populated outside production with the console mail provider, so a
+    #: reset can be exercised without a mail server.
+    link: str | None = None
+    expires_in_minutes: int | None = None
+
+
 class SignupRequest(BaseModel):
     """Self-service account creation.
 
@@ -84,6 +117,7 @@ class UserOut(ORMModel):
     id: uuid.UUID
     username: str
     email: str | None = None
+    email_verified: bool = False
     full_name: str = ""
     role: Role
     role_label_ar: str = ""

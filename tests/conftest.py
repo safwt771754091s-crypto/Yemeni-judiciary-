@@ -34,7 +34,11 @@ os.environ["APP_ENV"] = "test"
 socket.setdefaulttimeout(10.0)
 
 from app.db.repositories import case_repository
-from app.db.user_repository import section_repository, user_repository
+from app.db.user_repository import (
+    account_token_repository,
+    section_repository,
+    user_repository,
+)
 from app.db.vector_store import legal_document_admin_repository, reset_vector_store
 from app.db.workspace_repository import workspace_repository
 from app.schemas.legal import IngestTextRequest, LegalDocumentCreate
@@ -58,6 +62,7 @@ async def clean_state():
     case_repository._audit.clear()
     user_repository.reset()
     section_repository.reset()
+    account_token_repository.reset()
     legal_document_admin_repository.reset()
     workspace_repository.reset()
     yield

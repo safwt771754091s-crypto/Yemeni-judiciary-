@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#132030">
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/ui/icons/icon-192.png">
+<link rel="apple-touch-icon" href="/ui/icons/icon-192.png">
+<title>نسيت كلمة المرور — المنصة القضائية القانونية اليمنية</title>
+<link rel="stylesheet" href="/ui/portal.css">
+</head>
+<body>
+<noscript><div class="wrap"><div class="warn">يتطلب هذا النموذج تشغيل JavaScript.</div></div></noscript>
+
+<div class="login-wrap">
+  <div class="login-card">
+    <div class="logo">
+      <img src="/ui/icons/icon-192.png" alt="">
+      <h1>استعادة كلمة المرور</h1>
+    </div>
+    <p class="sub">أدخل بريدك الإلكتروني المسجَّل وسنرسل لك رابطاً لتعيين كلمة مرور جديدة.</p>
+    <label>البريد الإلكتروني</label>
+    <input id="email" type="email" autocomplete="email" autofocus>
+    <div class="err hide" id="msg"></div>
+    <div class="ok hide" id="ok"></div>
+    <div class="actions"><button class="primary" id="sendBtn">إرسال رابط الاستعادة</button></div>
+    <p class="sub" style="margin-top:14px"><a href="/ui/login.html">← العودة إلى تسجيل الدخول</a></p>
+  </div>
+</div>
+
+<script src="/ui/install.js"></script>
+<script src="/ui/portal.js"></script>
+<script>
+  (function () {
+    "use strict";
+    const P = window.Portal;
+    const $ = (id) => document.getElementById(id);
+
+    function fail(message) {
+      $("ok").classList.add("hide");
+      const box = $("msg");
+      box.textContent = message;
+      box.classList.remove("hide");
+    }
+    function succeed(message, link) {
+      $("msg").classList.add("hide");
+      const box = $("ok");
+      box.textContent = message;
+      box.classList.remove("hide");
+      if (link) {
+        // The console mail provider returns the link outside production so the
+        // flow can be tested without a mail server.
+        const a = document.createElement("a");
+        a.href = link;
+        a.textContent = "فتح رابط إعادة التعيين (بيئة التطوير)";
+        a.style.display = "block";
+        a.style.marginTop = "8px";
+        box.appendChild(a);
+      }
+    }
+
+    async function send() {
+      const email = $("email").value.trim();
+      if (!email) return fail("الرجاء إدخال البريد الإلكتروني");
+      $("sendBtn").disabled = true;
+      try {
+        const result = await P.auth.forgotPassword(email);
+        succeed(result.message || "تم إرسال رابط الاستعادة.", result.link);
+      } catch (e) {
+        fail(e.message);
+      } finally {
+        $("sendBtn").disabled = false;
+      }
+    }
+
+    $("sendBtn").onclick = send;
+    $("email").addEventListener("keydown", (e) => { if (e.key === "Enter") send(); });
+  })();
+</script>
+</body>
+</html>
