@@ -38,7 +38,8 @@ def test_statute_index_is_served_precompressed():
     assert resp.status_code == 200
     assert resp.headers["content-encoding"] == "gzip"
     assert resp.headers["cache-control"] == "public, max-age=86400"
-    assert resp.headers["vary"] == "Accept-Encoding"
+    # CORS appends Origin, so assert membership rather than equality.
+    assert "Accept-Encoding" in resp.headers["vary"]
     # The declared length is the compressed size, far below the raw JSON.
     assert int(resp.headers["content-length"]) < 1_000_000
     # httpx transparently decompresses, so the body is the usable index.
