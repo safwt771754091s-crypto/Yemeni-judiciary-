@@ -34,11 +34,12 @@ jobs:
         run: python -m ruff check app scripts tests
 
       - name: Offline search index is current
-        # The offline search box ships app/static/legal-index.json. Rebuild it
-        # and fail if it no longer matches the corpus, so the two cannot drift.
+        # The offline search box ships app/static/legal-index.json and its
+        # pre-compressed .gz. Rebuild both and fail if they no longer match the
+        # corpus, so the files and the build cannot drift apart.
         run: |
           python scripts/build_search_index.py
-          git diff --exit-code app/static/legal-index.json
+          git diff --exit-code app/static/legal-index.json app/static/legal-index.json.gz
 
       - name: Run test-suite
         run: python -m pytest -q

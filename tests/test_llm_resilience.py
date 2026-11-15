@@ -210,6 +210,37 @@ async def test_chain_sends_the_schema_block_to_the_provider():
     assert "queries" in seen["prompt"]
 
 
+@pytest.mark.asyncio
+async def test_schema_block_is_generated_once_per_chain():
+    """The schema must be built once, not on every call.
+
+    ``model_json_schema()`` walks the whole pydantic model graph (~10 ms of CPU);
+    regenerating it per chain run blocked the event loop on every case.
+    """
+    from app.llm.chains import LegalChain
+    from app.llm.outputs import QueryExpansionOutput
+
+    calls = {"n": 0}
+    original = QueryExpansionOutput.model_json_schema
+
+    def counting_schema(*args, **kwargs):
+        calls["n"] += 1
+        return original(*args, **kwargs)
+
+    QueryExpansionOutput.model_json_schema = counting_schema
+    try:
+        chain = LegalChain(
+            name="t", system_prompt="s", output_model=QueryExpansionOutput
+        )
+        first = chain._schema_block()
+        second = chain._schema_block()
+    finally:
+        QueryExpansionOutput.model_json_schema = original
+
+    assert first == second
+    assert calls["n"] == 1
+
+
 # ---------------------------------------------------------------------------
 # Offline fallback: the engine must keep drafting with no internet.
 # ---------------------------------------------------------------------------

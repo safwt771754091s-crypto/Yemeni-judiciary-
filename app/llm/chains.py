@@ -129,6 +129,10 @@ class LegalChain:
         self.provider = provider or llm_provider
         self.max_tokens = max_tokens
         self.temperature = temperature
+        # The schema block is derived only from ``output_model``, so build it
+        # once. Regenerating it per call cost ~10 ms of pure CPU (pydantic walks
+        # the whole model graph) on every chain run, blocking the event loop.
+        self._schema_block_cache: str | None = None
 
     def _render(self, blocks: Sequence[str]) -> str:
         body = "\n\n".join(blocks)
@@ -150,13 +154,16 @@ class LegalChain:
         for the validator. Nested objects are rendered up to a shallow depth;
         the top-level keys are what a wrong-language response breaks.
         """
+        if self._schema_block_cache is not None:
+            return self._schema_block_cache
         schema = self.output_model.model_json_schema()
         lines = [
             "«مخطط المخرجات الإلزامي»: أخرج كائن JSON واحداً بهذه المفاتيح بأسمائها",
             "الإنجليزية تماماً كما هي — لا تترجم أسماء المفاتيح إلى العربية:",
         ]
         _render_properties(schema, schema, lines, 0, 0)
-        return "\n".join(lines)
+        self._schema_block_cache = "\n".join(lines)
+        return self._schema_block_cache
 
     async def run(self, blocks: Sequence[str], *, context: dict[str, Any] | None = None) -> ChainResult:
         blocks = list(blocks)

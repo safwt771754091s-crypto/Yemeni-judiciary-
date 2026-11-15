@@ -417,3 +417,55 @@ async def test_administrative_case_retrieves_the_constitution(seeded_store):
     assert any(r.source_type.value == "constitution" for r in results), (
         "the constitution must be present in the administrative case results"
     )
+
+
+async def test_case_queries_are_embedded_in_one_batch(seeded_store):
+    """The planned queries must be embedded in one batch, not one call each.
+
+    Embedding and searching serially made 8 round-trips per case; on a hosted
+    embedder that latency dominates the request. The results must be unchanged.
+    """
+    counts = {"batches": 0, "singles": 0, "searches": 0}
+    embedder = retrieval_service.embedder
+    store = retrieval_service.store
+    original_documents = embedder.embed_documents
+    original_query = embedder.embed_query
+    original_search = store.search
+
+    async def counting_documents(texts):
+        counts["batches"] += 1
+        return await original_documents(texts)
+
+    async def counting_query(text):
+        counts["singles"] += 1
+        return await original_query(text)
+
+    async def counting_search(**kwargs):
+        counts["searches"] += 1
+        return await original_search(**kwargs)
+
+    embedder.embed_documents = counting_documents
+    embedder.embed_query = counting_query
+    store.search = counting_search
+    try:
+        results, queries = await retrieval_service.retrieve_for_case(
+            case={
+                "case_type": "مدني",
+                "subject_matter": "المطالبة بتنفيذ عقد بيع وإلزام المدين بالثمن",
+                "facts_summary": "تأخر المدعى عليه في سداد ثمن المبيع.",
+                "plaintiff_claims": [{"title": "إلزام بالثمن", "description": "إلزام بالثمن"}],
+                "defendant_responses": [],
+            },
+            top_k=8,
+            case_type="مدني",
+        )
+    finally:
+        embedder.embed_documents = original_documents
+        embedder.embed_query = original_query
+        store.search = original_search
+
+    assert results, "batching must not change the retrieved set"
+    assert queries, "the planner must still produce queries"
+    assert counts["batches"] == 1, "all planned queries go in one embedding batch"
+    assert counts["singles"] == 0, "no per-query embedding call"
+    assert counts["searches"] == len(queries), "one search per query"

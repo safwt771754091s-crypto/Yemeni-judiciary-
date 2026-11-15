@@ -25,6 +25,7 @@ is deterministic (no timestamp) so CI can diff it against the committed copy.
 from __future__ import annotations
 
 import argparse
+import gzip
 import json
 import sys
 from pathlib import Path
@@ -82,11 +83,17 @@ def main() -> int:
 
     index = build(args.file)
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text(
-        json.dumps(index, ensure_ascii=False, separators=(",", ":")), encoding="utf-8"
-    )
+    payload = json.dumps(index, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    args.out.write_bytes(payload)
+    # Ship a pre-compressed copy too: compressing 3.8 MB on every request costs
+    # ~0.5 s of CPU on the event loop, so the server serves this file directly.
+    # mtime=0 keeps the gzip byte-for-byte reproducible for the CI drift check.
+    gz_path = args.out.with_name(args.out.name + ".gz")
+    with gzip.GzipFile(filename="", mode="wb", fileobj=gz_path.open("wb"), mtime=0) as gz:
+        gz.write(payload)
     size_kb = args.out.stat().st_size / 1024
-    print(f"wrote {index['count']} articles to {args.out} ({size_kb:.0f} KB)")
+    gz_kb = gz_path.stat().st_size / 1024
+    print(f"wrote {index['count']} articles to {args.out} ({size_kb:.0f} KB, gz {gz_kb:.0f} KB)")
     return 0
 
 

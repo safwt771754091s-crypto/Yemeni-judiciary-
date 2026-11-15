@@ -15,6 +15,7 @@ material for the reasoning and judgment chains.
 """
 from __future__ import annotations
 
+import asyncio
 import re
 import time
 from typing import Any
@@ -306,18 +307,30 @@ class RetrievalService:
         source_types = sources_for_case_type(case_type or case.get("case_type"))
 
         merged: dict[str, RetrievedArticle] = {}
-        for query in queries:
-            embedding = await self.embedder.embed_query(query)
-            for article in await self.store.search(
-                query=query,
-                query_embedding=embedding,
-                top_k=settings.retrieval_candidates,
-                source_types=source_types,
-                min_similarity=0.0,
-            ):
-                current = merged.get(article.article_id)
-                if current is None or article.fused_score > current.fused_score:
-                    merged[article.article_id] = article
+        if queries:
+            # The planned queries are independent, so embed them in one batch
+            # and search concurrently. Done serially this is 8 embedding
+            # round-trips plus 8 vector searches per case, and the provider and
+            # database latency stack up (measured ~0.8 s cold, dominated by the
+            # per-query embedding call).
+            embeddings = await self.embedder.embed_documents(queries)
+            search_results = await asyncio.gather(
+                *(
+                    self.store.search(
+                        query=query,
+                        query_embedding=embedding,
+                        top_k=settings.retrieval_candidates,
+                        source_types=source_types,
+                        min_similarity=0.0,
+                    )
+                    for query, embedding in zip(queries, embeddings, strict=True)
+                )
+            )
+            for articles in search_results:
+                for article in articles:
+                    current = merged.get(article.article_id)
+                    if current is None or article.fused_score > current.fused_score:
+                        merged[article.article_id] = article
 
         # Article numbers explicitly cited by the parties must always be present
         # and must rank ahead of merely topical hits: a judge cannot ignore the
