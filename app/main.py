@@ -9,7 +9,7 @@ from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from app.api.pages import page_gate
@@ -126,6 +126,34 @@ def create_app() -> FastAPI:
         # or some mobile browsers refuse to install them. Python's mimetypes does
         # not know the extension by default.
         mimetypes.add_type("application/vnd.android.package-archive", ".apk")
+
+        # Serve the offline statute index pre-compressed. Compressing the ~3.8 MB
+        # JSON on every request costs ~0.5 s of CPU (Starlette's gzip runs at
+        # level 9 on the event loop), which serialises concurrent requests. The
+        # build step writes the .gz next to the .json, so this just hands the
+        # bytes over. Registered before the /ui mount so it wins the match.
+        index_json = static_dir / "legal-index.json"
+        index_gz = static_dir / "legal-index.json.gz"
+
+        @app.get("/ui/legal-index.json", include_in_schema=False)
+        async def statute_index(request: Request) -> Response:
+            accepts_gzip = "gzip" in request.headers.get("accept-encoding", "")
+            if accepts_gzip and index_gz.is_file():
+                return FileResponse(
+                    str(index_gz),
+                    media_type="application/json",
+                    headers={
+                        "Content-Encoding": "gzip",
+                        "Vary": "Accept-Encoding",
+                        "Cache-Control": "public, max-age=86400",
+                    },
+                )
+            return FileResponse(
+                str(index_json),
+                media_type="application/json",
+                headers={"Cache-Control": "public, max-age=86400"},
+            )
+
         app.mount("/ui", StaticFiles(directory=str(static_dir), html=True), name="ui")
 
         # The PWA manifest and service worker are served from the site root so
