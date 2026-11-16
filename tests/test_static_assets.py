@@ -53,3 +53,54 @@ def test_statute_index_falls_back_to_plain_json_without_gzip():
     assert "content-encoding" not in resp.headers
     assert resp.headers["cache-control"] == "public, max-age=86400"
     assert resp.content[:1] == b"{"
+
+
+def test_immutable_assets_are_cached_for_a_year():
+    """Icons and fonts must not be re-fetched on every page load.
+
+    Starlette's default ``max-age=0, must-revalidate`` made the browser (and
+    Vercel's edge) re-request every icon and script on every navigation, which
+    turns a page load into a cold start per asset.
+    """
+    client = TestClient(create_app())
+    for path in ("/ui/icons/icon-192.png", "/ui/icons/icon-512.png"):
+        resp = client.get(path)
+        assert resp.status_code == 200, path
+        assert resp.headers["cache-control"] == "public, max-age=31536000, immutable", path
+
+
+def test_scripts_and_stylesheets_are_cached_at_the_edge():
+    """Scripts and stylesheets must be served from the CDN, not the function.
+
+    They keep their filename across deploys, so the browser still revalidates
+    them; ``s-maxage`` lets the edge answer that revalidation instead of waking
+    the serverless function on every visit.
+    """
+    client = TestClient(create_app())
+    for path in ("/ui/portal.js", "/ui/portal.css", "/ui/statute-search.js"):
+        resp = client.get(path)
+        assert resp.status_code == 200, path
+        cache_control = resp.headers["cache-control"]
+        assert "s-maxage=" in cache_control, (path, cache_control)
+        assert "max-age=0" in cache_control, (path, cache_control)
+
+
+def test_html_pages_stay_revalidated():
+    """A page must never be served stale from cache after a deploy."""
+    client = TestClient(create_app())
+    for path in ("/", "/ui/admin.html"):
+        resp = client.get(path)
+        assert resp.status_code == 200, path
+        assert "must-revalidate" in resp.headers["cache-control"], path
+
+
+def test_landing_page_defers_the_offline_index():
+    """The 3.9 MB index must not be fetched during the first paint.
+
+    Warming it synchronously blocked the landing page's first render; it is now
+    deferred to an idle callback while the first search still loads it on demand.
+    """
+    client = TestClient(create_app())
+    html = client.get("/").text
+    assert "requestIdleCallback" in html
+    assert "loadIndex()" in html
