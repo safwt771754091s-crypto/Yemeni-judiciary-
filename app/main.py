@@ -85,6 +85,48 @@ async def _bootstrap_platform() -> None:
         logger.warning("platform bootstrap skipped", extra={"error": str(exc)})
 
 
+#: Media types that never change once shipped, so the browser and the CDN may
+#: hold them for a year without ever asking again.
+_IMMUTABLE_PREFIXES = ("image/", "font/", "audio/", "video/")
+_APK_TYPE = "application/vnd.android.package-archive"
+
+#: Scripts and stylesheets keep their filename across deploys, so the browser
+#: must revalidate them. ``s-maxage`` still lets the CDN hold them for a year,
+#: so the revalidation is answered at the edge instead of by the serverless
+#: function; ``stale-while-revalidate`` serves the cached copy while it refreshes.
+_EDGE_CACHED = "public, max-age=0, s-maxage=31536000, stale-while-revalidate=86400"
+_MUST_REVALIDATE = "public, max-age=0, must-revalidate"
+
+
+def _static_cache_control(media_type: str | None) -> str:
+    """The Cache-Control to attach to a static response of this media type."""
+    kind = (media_type or "").split(";", 1)[0].strip().lower()
+    if kind.startswith(_IMMUTABLE_PREFIXES) or kind == _APK_TYPE:
+        return "public, max-age=31536000, immutable"
+    if kind == "text/html":
+        return _MUST_REVALIDATE
+    return _EDGE_CACHED
+
+
+class _CacheAwareStaticFiles(StaticFiles):
+    """Static files served with cache headers, so a reload is not a cold start.
+
+    Starlette's default ``max-age=0, must-revalidate`` marks every script,
+    stylesheet and icon as stale, so each page load re-fetches each asset from
+    the serverless function. On a cold start that is seconds per asset. This
+    subclass gives images and fonts an immutable year and lets the CDN hold
+    scripts and stylesheets, while the browser still revalidates them.
+    """
+
+    async def get_response(self, path: str, scope) -> Response:
+        response = await super().get_response(path, scope)
+        if response.status_code == 200:
+            response.headers.setdefault(
+                "Cache-Control", _static_cache_control(response.headers.get("content-type"))
+            )
+        return response
+
+
 def create_app() -> FastAPI:
     app = FastAPI(
         title=settings.app_name,
@@ -155,10 +197,10 @@ def create_app() -> FastAPI:
             return FileResponse(
                 str(index_json),
                 media_type="application/json",
-                headers={"Cache-Control": "public, max-age=86400"},
+                headers={"Cache-Control": "public, max-age=86400", "Vary": "Accept-Encoding"},
             )
 
-        app.mount("/ui", StaticFiles(directory=str(static_dir), html=True), name="ui")
+        app.mount("/ui", _CacheAwareStaticFiles(directory=str(static_dir), html=True), name="ui")
 
         # The PWA manifest and service worker are served from the site root so
         # the worker can claim the whole origin (scope "/"), not only /ui/.
@@ -168,6 +210,7 @@ def create_app() -> FastAPI:
             return FileResponse(
                 str(static_dir / "manifest.json"),
                 media_type="application/manifest+json",
+                headers={"Cache-Control": "public, max-age=86400"},
             )
 
         @app.get("/sw.js", include_in_schema=False)
@@ -185,7 +228,11 @@ def create_app() -> FastAPI:
         for name in ("landing.html", "index.html"):
             page = static_dir / name
             if page.is_file():
-                return FileResponse(str(page))
+                return FileResponse(
+                    str(page),
+                    media_type="text/html",
+                    headers={"Cache-Control": "public, max-age=0, must-revalidate"},
+                )
         return {
             "name": settings.app_name,
             "version": "1.0.0",

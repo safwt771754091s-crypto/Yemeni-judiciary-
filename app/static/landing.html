@@ -467,8 +467,16 @@
   for (const input of [numInput, textInput]) {
     input.addEventListener("keydown", (e) => { if (e.key === "Enter") runSearch(); });
   }
-  // Warm the offline index so the first search is instant and works offline.
-  StatuteSearch.loadIndex();
+  // Warm the offline index only once the page is idle. Fetching and parsing the
+  // ~3.9 MB corpus (670 KB on the wire) on load blocked the first paint and made
+  // the landing page feel slow on a phone; the first search still loads it on
+  // demand if the user types before the idle callback runs.
+  const warm = () => StatuteSearch.loadIndex();
+  if ("requestIdleCallback" in window) {
+    requestIdleCallback(warm, { timeout: 3000 });
+  } else {
+    setTimeout(warm, 2000);
+  }
 </script>
 </body>
 </html>
