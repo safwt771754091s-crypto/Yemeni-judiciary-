@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#132030">
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/ui/icons/icon-192.png">
+<link rel="apple-touch-icon" href="/ui/icons/icon-192.png">
+<title>تأكيد البريد الإلكتروني — المنصة القضائية القانونية اليمنية</title>
+<link rel="stylesheet" href="/ui/portal.css">
+</head>
+<body>
+<noscript><div class="wrap"><div class="warn">يتطلب تأكيد البريد تشغيل JavaScript.</div></div></noscript>
+
+<div class="login-wrap">
+  <div class="login-card">
+    <div class="logo">
+      <img src="/ui/icons/icon-192.png" alt="">
+      <h1>تأكيد البريد الإلكتروني</h1>
+    </div>
+    <p class="sub" id="status">جارٍ التحقق من الرابط…</p>
+    <div class="err hide" id="msg"></div>
+    <div class="ok hide" id="ok"></div>
+    <div class="actions"><button class="primary" id="goBtn">الانتقال إلى تسجيل الدخول</button></div>
+  </div>
+</div>
+
+<script src="/ui/install.js"></script>
+<script src="/ui/portal.js"></script>
+<script>
+  (function () {
+    "use strict";
+    const P = window.Portal;
+    const $ = (id) => document.getElementById(id);
+    const token = new URLSearchParams(location.search).get("token") || "";
+
+    $("goBtn").onclick = () => { location.href = "/ui/login.html"; };
+
+    function fail(message) {
+      $("status").textContent = "تعذّر تأكيد البريد.";
+      const box = $("msg");
+      box.textContent = message;
+      box.classList.remove("hide");
+    }
+    function succeed(message) {
+      $("status").textContent = "تم التأكيد بنجاح.";
+      const box = $("ok");
+      box.textContent = message;
+      box.classList.remove("hide");
+    }
+
+    if (!token) {
+      fail("رابط التأكيد غير صالح. سجّل الدخول واطلب رسالة تأكيد جديدة.");
+      return;
+    }
+
+    P.auth.verifyEmail(token).then(
+      (result) => succeed(result.message || "تم تأكيد بريدك الإلكتروني بنجاح."),
+      (e) => fail(e.message)
+    );
+  })();
+</script>
+</body>
+</html>

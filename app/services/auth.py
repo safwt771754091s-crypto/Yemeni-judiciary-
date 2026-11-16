@@ -19,6 +19,7 @@ from app.core.logging import get_logger
 from app.core.permissions import Role, has_permission, permissions_for
 from app.core.security import decode_token, encode_token, verify_password
 from app.db.user_repository import UserRepository, user_repository
+from app.services.account import account_service
 
 logger = get_logger(__name__)
 
@@ -101,13 +102,18 @@ class AuthService:
 
     # -- login -------------------------------------------------------------
     async def authenticate(self, username: str, password: str) -> dict[str, Any]:
-        """Verify credentials and return the user row."""
-        user = await self.users.get_by_username(username)
+        """Verify credentials and return the user row.
+
+        ``username`` may be a username or, when ``ALLOW_EMAIL_LOGIN`` is on, an
+        email address.
+        """
+        user = await account_service.find_by_login(username)
         if user is None or not verify_password(password, user.get("password_hash", "")):
             # Same message for unknown user and wrong password: no enumeration.
             raise UnauthorizedError("اسم المستخدم أو كلمة المرور غير صحيحة")
         if not user.get("is_active", True):
             raise ForbiddenError("هذا الحساب معطّل، يرجى مراجعة مالك المنصة")
+        account_service.enforce_verification(user)
         await self.users.touch_login(user["id"])
         return user
 
