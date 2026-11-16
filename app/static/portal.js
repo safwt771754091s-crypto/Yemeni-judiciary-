@@ -8,13 +8,35 @@
 
   const TOKEN_KEY = "legal_portal_token";
 
+  // A login must survive closing the tab or the installed PWA, so the token is
+  // kept in localStorage. sessionStorage (the previous store) is cleared when
+  // the tab closes, which is what made the platform look like it "forgot" the
+  // account. A value left in sessionStorage by an older build is migrated once.
+  const store = {
+    read() {
+      let token = localStorage.getItem(TOKEN_KEY) || "";
+      if (!token) {
+        token = sessionStorage.getItem(TOKEN_KEY) || "";
+        if (token) {
+          localStorage.setItem(TOKEN_KEY, token);
+          sessionStorage.removeItem(TOKEN_KEY);
+        }
+      }
+      return token;
+    },
+    write(token) {
+      if (token) localStorage.setItem(TOKEN_KEY, token);
+      else localStorage.removeItem(TOKEN_KEY);
+      sessionStorage.removeItem(TOKEN_KEY);
+    },
+  };
+
   const api = {
     token() {
-      return sessionStorage.getItem(TOKEN_KEY) || "";
+      return store.read();
     },
     setToken(token) {
-      if (token) sessionStorage.setItem(TOKEN_KEY, token);
-      else sessionStorage.removeItem(TOKEN_KEY);
+      store.write(token);
     },
     headers(extra) {
       const h = Object.assign({ "Content-Type": "application/json" }, extra || {});

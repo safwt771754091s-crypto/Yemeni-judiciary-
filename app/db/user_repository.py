@@ -167,13 +167,14 @@ class UserRepository:
         permissions: list[str] | None = None,
         created_by: str | None = None,
         email_verified: bool = False,
+        user_id: uuid.UUID | str | None = None,
     ) -> dict[str, Any]:
         if await self.get_by_username(username):
             raise ConflictError(f"اسم المستخدم «{username}» مستخدم بالفعل")
         if email and await self.get_by_email(email):
             raise ConflictError("هذا البريد الإلكتروني مسجَّل بالفعل")
         payload = {
-            "id": uuid.uuid4(),
+            "id": uuid.UUID(str(user_id)) if user_id else uuid.uuid4(),
             "username": username,
             "email": email,
             "email_verified": bool(email_verified),
@@ -190,10 +191,12 @@ class UserRepository:
         if self.persistent:
             row = await database.fetchrow(
                 f"insert into platform_users "
-                "(username, email, email_verified, full_name, password_hash, role, "
+                "(id, username, email, email_verified, full_name, password_hash, role, "
                 "permissions, created_by) "
-                "values ($1, $2, $3, $4, $5, $6::user_role, $7::jsonb, $8) "
+                "values ($1, $2, $3, $4, $5, $6, $7::user_role, $8::jsonb, $9) "
+                "on conflict (id) do nothing "
                 f"returning {_USER_COLUMNS}",
+                payload["id"],
                 username,
                 email,
                 payload["email_verified"],
@@ -203,7 +206,13 @@ class UserRepository:
                 _jsonable(payload["permissions"]),
                 payload["created_by"],
             )
-            return dict(row)
+            if row is not None:
+                return dict(row)
+            # The id already exists (a concurrent seed won the race); read it back.
+            existing = await database.fetchrow(
+                f"select {_USER_COLUMNS} from platform_users where id = $1", payload["id"]
+            )
+            return dict(existing) if existing else {}
         self._users[str(payload["id"])] = payload
         return {k: v for k, v in payload.items() if k != "password_hash"}
 

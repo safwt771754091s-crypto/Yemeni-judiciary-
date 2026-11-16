@@ -279,7 +279,7 @@ const $ = s => document.querySelector(s);
 const esc = s => (s ?? '').toString().replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const ROLE_AR = {owner:'مالك المنصة', admin:'مدير', editor:'محرر', reviewer:'مراجع', viewer:'مطّلع',
   judge:'قاضٍ', lawyer:'محامٍ', prosecutor:'عضو نيابة', researcher:'باحث قانوني'};
-let TOKEN = sessionStorage.getItem('legal_token') || '';
+let TOKEN = localStorage.getItem('legal_token') || '';
 let ME = null;
 
 function msg(text, kind='ok'){
@@ -306,14 +306,14 @@ async function login(){
   $('#loginBtn').disabled = true;
   try{
     const d = await api('/auth/login', {method:'POST', body: JSON.stringify({username, password})});
-    TOKEN = d.access_token; sessionStorage.setItem('legal_token', TOKEN);
+    TOKEN = d.access_token; localStorage.setItem('legal_token', TOKEN);
     ME = d.user; $('#p').value = '';
     await start();
     msg('مرحباً ' + (ME.full_name || ME.username));
   }catch(e){ msg(e.message, 'err'); }
   finally{ $('#loginBtn').disabled = false; }
 }
-function logout(){ TOKEN=''; ME=null; sessionStorage.removeItem('legal_token');
+function logout(){ TOKEN=''; ME=null; localStorage.removeItem('legal_token');
   // The session cookie is HttpOnly, so ask the API to clear it before returning
   // to the login page; the UI is reset immediately either way.
   fetch('/api/v1/auth/logout', {method:'POST'}).finally(() => {

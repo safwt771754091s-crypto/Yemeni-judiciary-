@@ -17,6 +17,7 @@ from app.api.v1.router import api_router
 from app.core.config import settings
 from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging, get_logger
+from app.db.migrations import apply_migrations
 from app.db.pool import database
 from app.db.user_repository import section_repository
 from app.db.vector_store import vector_store
@@ -55,6 +56,9 @@ async def lifespan(app: FastAPI):
     if settings.database_enabled:
         try:
             await database.connect()
+            applied = await apply_migrations()
+            if applied:
+                logger.info("schema migrations applied", extra={"count": applied})
         except Exception as exc:
             logger.error("database unavailable at startup", extra={"error": str(exc)})
     await _bootstrap_platform()

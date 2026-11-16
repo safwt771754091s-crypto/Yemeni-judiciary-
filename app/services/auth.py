@@ -5,6 +5,7 @@ verifying access tokens, and answering permission questions for a user.
 """
 from __future__ import annotations
 
+import uuid
 from typing import Any
 
 from app.core.config import settings
@@ -82,6 +83,18 @@ class AuthService:
         self.users = users or user_repository
 
     # -- bootstrap ---------------------------------------------------------
+    def owner_id(self) -> uuid.UUID:
+        """A stable id for the seeded owner account.
+
+        The owner is created on first startup, so with a random id every
+        environment (and every serverless cold start that loses its in-memory
+        store) would seed a *different* owner row for the same person. A
+        deterministic id derived from the username makes the owner the same
+        account everywhere, so an existing database and the live deployment
+        agree on who the owner is.
+        """
+        return uuid.uuid5(uuid.NAMESPACE_URL, f"yemeni-legal:owner:{settings.owner_username.lower()}")
+
     async def ensure_owner(self) -> dict[str, Any] | None:
         """Create the owner account when the platform has no users yet.
 
@@ -96,6 +109,7 @@ class AuthService:
             role=Role.OWNER,
             full_name=settings.owner_full_name,
             email=settings.owner_email,
+            user_id=self.owner_id(),
         )
         logger.info("seeded platform owner account", extra={"username": settings.owner_username})
         return owner
