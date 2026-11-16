@@ -117,6 +117,13 @@ class Settings(BaseSettings):
     owner_email: str | None = None
     owner_full_name: str = "مالك المنصة"
 
+    # When no Postgres DSN is configured the app falls back to the in-process
+    # vector store, which starts empty - so legal search and judgment drafting
+    # would return nothing. Loading the bundled excerpt at startup gives the
+    # serverless deployment real content before the durable database is linked.
+    # Disable it with SEED_SAMPLE_CORPUS=false once a database is in place.
+    seed_sample_corpus: bool = True
+
     # Self-service signup. Enabled by default so the platform can be tried
     # without an operator; set ALLOW_SELF_SIGNUP=false to require an invitation.
     # Signups may only pick from these roles - never owner, admin or editor.

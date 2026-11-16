@@ -1,6 +1,7 @@
 """FastAPI application factory for the Yemeni Legal AI Platform."""
 from __future__ import annotations
 
+import json
 import mimetypes
 import time
 from contextlib import asynccontextmanager
@@ -21,7 +22,9 @@ from app.db.migrations import apply_migrations
 from app.db.pool import database
 from app.db.user_repository import section_repository
 from app.db.vector_store import vector_store
+from app.schemas.legal import IngestTextRequest, LegalDocumentCreate
 from app.services.auth import DEFAULT_SECTIONS, auth_service
+from app.services.ingestion import ingestion_service
 
 logger = get_logger(__name__)
 
@@ -62,6 +65,7 @@ async def lifespan(app: FastAPI):
         except Exception as exc:
             logger.error("database unavailable at startup", extra={"error": str(exc)})
     await _bootstrap_platform()
+    await _seed_sample_corpus()
     yield
     await database.disconnect()
     logger.info("shutdown complete")
@@ -83,6 +87,40 @@ async def _bootstrap_platform() -> None:
             logger.info("default sections created", extra={"count": len(DEFAULT_SECTIONS)})
     except Exception as exc:  # pragma: no cover - defensive
         logger.warning("platform bootstrap skipped", extra={"error": str(exc)})
+
+
+async def _seed_sample_corpus() -> None:
+    """Load the bundled legal excerpt into the empty in-memory store.
+
+    Only runs when no Postgres DSN is configured and the store has no articles.
+    The full corpus belongs in the database (``scripts/seed_corpus.py``); this is
+    a bounded fallback so a serverless deployment without a database still
+    answers legal search instead of returning nothing. Failures are logged,
+    never fatal.
+    """
+    if settings.database_enabled or not settings.seed_sample_corpus:
+        return
+    try:
+        if (await ingestion_service.stats())["total_articles"]:
+            return
+        sample = Path(__file__).parent / "data" / "samples" / "yemeni_laws_excerpt.json"
+        if not sample.is_file():
+            return
+        payload = json.loads(sample.read_text(encoding="utf-8"))
+        for entry in payload.get("documents", []):
+            await ingestion_service.ingest_text(
+                IngestTextRequest(
+                    document=LegalDocumentCreate(**entry["document"]),
+                    text=entry["text"],
+                )
+            )
+        stats = await ingestion_service.stats()
+        logger.info(
+            "sample corpus loaded into the in-memory store",
+            extra={"articles": stats["total_articles"], "documents": stats["total_documents"]},
+        )
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.warning("sample corpus seeding skipped", extra={"error": str(exc)})
 
 
 #: Media types that never change once shipped, so the browser and the CDN may
