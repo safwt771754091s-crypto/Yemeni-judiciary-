@@ -21,7 +21,7 @@ android {
         resValue "string", "app_name", "المنصة القضائية القانونية اليمنية"
         // The deployed platform. Override with: ./gradlew assembleRelease -PplatformUrl=https://...
         buildConfigField "String", "PLATFORM_URL",
-                "\"${project.findProperty('platformUrl') ?: 'https://work-1-ixoimvjksxoackrm.prod-runtime.all-hands.dev'}\""
+                "\"${project.findProperty('platformUrl') ?: 'https://yemeni-judiciary.vercel.app'}\""
     }
 
     buildFeatures {

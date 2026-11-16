@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     api_prefix: str = "/api/v1"
 
     # --- database ---
+    #: Neon Postgres connection string — the platform's durable store.
+    neon_database_url: str | None = None
+    #: Legacy alias kept so existing deployments (and SUPABASE_DB_URL) keep working.
     supabase_db_url: str | None = None
     supabase_url: str | None = None
     supabase_anon_key: str | None = None
@@ -131,31 +134,37 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _adopt_platform_database_url(self) -> Settings:
-        """Accept the Postgres URL under any name a host injects.
+        """Resolve the Postgres connection string from the environment.
 
-        SUPABASE_DB_URL is what this project documents, but the Vercel↔Neon
-        integration (and Heroku-style hosts) expose the same connection string
-        as DATABASE_URL / POSTGRES_URL / NEON_DATABASE_URL. Without this the
-        app silently falls back to the per-instance in-memory store and every
-        account disappears on the next cold start.
+        Neon is the platform's durable store, so ``NEON_DATABASE_URL`` is read
+        first. A host may instead inject the same string under a generic name —
+        ``DATABASE_URL`` (Vercel↔Neon integration, Heroku), ``POSTGRES_URL``,
+        ``POSTGRES_PRISMA_URL`` — and ``SUPABASE_DB_URL`` remains supported as a
+        legacy alias. Without any of these the app silently falls back to the
+        per-instance in-memory store and every account disappears on a cold
+        start.
         """
-        if not self.supabase_db_url:
-            for name in (
-                "DATABASE_URL",
-                "POSTGRES_URL",
-                "POSTGRES_PRISMA_URL",
-                "NEON_DATABASE_URL",
-                "SUPABASE_DB_URL",
-            ):
-                value = os.environ.get(name, "").strip()
-                if value.startswith(("postgres://", "postgresql://")):
-                    self.supabase_db_url = value
-                    break
+        for name in (
+            "NEON_DATABASE_URL",
+            "DATABASE_URL",
+            "POSTGRES_URL",
+            "POSTGRES_PRISMA_URL",
+            "SUPABASE_DB_URL",
+        ):
+            value = os.environ.get(name, "").strip()
+            if value.startswith(("postgres://", "postgresql://")):
+                self.neon_database_url = value
+                break
         return self
 
     @property
+    def database_url(self) -> str | None:
+        """The effective Postgres DSN, whatever name it arrived under."""
+        return self.neon_database_url or self.supabase_db_url
+
+    @property
     def database_enabled(self) -> bool:
-        return bool(self.supabase_db_url)
+        return bool(self.database_url)
 
     @property
     def is_production(self) -> bool:

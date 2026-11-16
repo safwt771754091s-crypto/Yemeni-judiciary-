@@ -44,7 +44,7 @@ class Database:
                 return
             try:
                 self._pool = await asyncpg.create_pool(
-                    dsn=settings.supabase_db_url,
+                    dsn=settings.database_url,
                     min_size=settings.db_min_pool,
                     max_size=settings.db_max_pool,
                     command_timeout=settings.db_command_timeout,
