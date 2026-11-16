@@ -36,10 +36,14 @@ jobs:
           java-version: "17"
 
       - name: Install SDK platform and build tools
-        # GitHub-hosted runners ship the Android SDK at $ANDROID_HOME already.
-        # android-actions/setup-android tries to install the removed legacy
-        # "tools" package and fails, so only the missing packages are added.
+        # GitHub-hosted runners ship the Android SDK, but its cmdline-tools are
+        # not on PATH. android-actions/setup-android tries to install the removed
+        # legacy "tools" package and fails, so the path is set here instead.
         run: |
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          CMDLINE=$(ls -d "$SDK"/cmdline-tools/*/bin 2>/dev/null | head -1)
+          export PATH="$CMDLINE:$SDK/platform-tools:$PATH"
+          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
           yes | sdkmanager --licenses > /dev/null || true
           sdkmanager "platforms;android-34" "build-tools;34.0.0"
 
