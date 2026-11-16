@@ -1,10 +1,11 @@
 """Application configuration (pydantic-settings, 12-factor)."""
 from __future__ import annotations
 
+import os
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.core.permissions import Role
@@ -127,6 +128,30 @@ class Settings(BaseSettings):
     @classmethod
     def _blank_to_none(cls, v: object) -> object:
         return None if isinstance(v, str) and not v.strip() else v
+
+    @model_validator(mode="after")
+    def _adopt_platform_database_url(self) -> Settings:
+        """Accept the Postgres URL under any name a host injects.
+
+        SUPABASE_DB_URL is what this project documents, but the Vercel↔Neon
+        integration (and Heroku-style hosts) expose the same connection string
+        as DATABASE_URL / POSTGRES_URL / NEON_DATABASE_URL. Without this the
+        app silently falls back to the per-instance in-memory store and every
+        account disappears on the next cold start.
+        """
+        if not self.supabase_db_url:
+            for name in (
+                "DATABASE_URL",
+                "POSTGRES_URL",
+                "POSTGRES_PRISMA_URL",
+                "NEON_DATABASE_URL",
+                "SUPABASE_DB_URL",
+            ):
+                value = os.environ.get(name, "").strip()
+                if value.startswith(("postgres://", "postgresql://")):
+                    self.supabase_db_url = value
+                    break
+        return self
 
     @property
     def database_enabled(self) -> bool:
