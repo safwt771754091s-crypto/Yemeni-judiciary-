@@ -87,3 +87,28 @@ def test_session_token_survives_a_tab_close(page: str) -> None:
     # A read from sessionStorage is allowed only as the one-time migration path.
     if "sessionStorage.getItem" in source:
         assert "localStorage.setItem" in source
+
+
+def test_owner_id_is_stable_across_environments() -> None:
+    """The seeded owner must have the same id everywhere.
+
+    With a random id, each environment - and each serverless cold start that
+    loses its in-memory store - seeded a different owner row for the same
+    person, so the live deployment and the database never agreed on who the
+    owner was.
+    """
+    from app.services.auth import auth_service
+
+    first = auth_service.owner_id()
+    second = auth_service.owner_id()
+    assert first == second
+    assert first.version == 5, "a deterministic (name-based) UUID is required"
+
+
+def test_user_create_accepts_an_explicit_id() -> None:
+    import inspect
+
+    from app.db.user_repository import UserRepository
+
+    params = inspect.signature(UserRepository.create).parameters
+    assert "user_id" in params, "the seed must be able to pass a stable owner id"
