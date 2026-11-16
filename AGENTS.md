@@ -32,6 +32,7 @@ output and was killed. Every command you run must be able to finish on its own:
 - If you must run something that touches the network or a database, bound it
   (`timeout 120 <cmd>`, or a client-level timeout) so it fails instead of
   hanging.
+
 - Never start the dev server in the foreground of a command you need to return
   from: it never exits, so the command hangs until it is killed. Start it in the
   background with its output redirected
@@ -110,3 +111,18 @@ page's shell script). `tests/test_portals_assistant.py` asserts the static
 assets are served and that `/` returns the landing page. When you add a page,
 add it to `INSTALL_PAGES` and to the static-asset list, and regenerate the
 manifest screenshots if the layout changes.
+
+## Neon tooling
+
+The Neon CLI and the official Neon agent skills are installed for building on
+Neon (see `.agents/skills/`, fetched from
+`https://neon.com/.well-known/agent-skills/<skill>/SKILL.md`).
+
+- CLI: `npm install -g neon@latest`; the binary lands in `~/.npm-global/bin/neon`
+  (add that directory to `PATH`). The system npm prefix is not writable.
+- Auth: `neon login` opens a browser and cannot complete in a headless sandbox.
+  Use an API key instead — `NEON_API_KEY=... neon projects list`, or persist one
+  with `neon profile create agent --api-key -`. The value must be a real Neon
+  key; a placeholder is rejected with HTTP 401.
+- The MCP server (`https://mcp.neon.tech/mcp`) is configured in the OpenHands
+  account settings, not on disk, and only loads after the agent restarts.
