@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     #: blocked or unreachable host stalls the caller until the OS gives up
     #: (minutes), which reads as a hung command.
     db_connect_timeout: float = 10.0
+    #: Apply sql/*.sql on startup, tracked in schema_migrations. On by default so
+    #: a deploy can never run ahead of its schema; the files are idempotent.
+    auto_migrate: bool = True
 
     # --- embeddings ---
     embedding_provider: Literal["hash", "openai"] = "hash"
