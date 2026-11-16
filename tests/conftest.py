@@ -20,8 +20,17 @@ sys.path.insert(0, str(ROOT))
 
 # The suite is hermetic: it always exercises the offline code paths (in-memory
 # vector store + deterministic mock LLM), regardless of any .env on the machine.
-# Set before app.core.config is imported for the first time.
-os.environ["SUPABASE_DB_URL"] = ""
+# Set before app.core.config is imported for the first time. Every name the
+# config validator reads must be blanked, or an ambient DATABASE_URL (e.g. from
+# a host or a developer shell) would silently point the suite at a real database.
+for _db_var in (
+    "NEON_DATABASE_URL",
+    "DATABASE_URL",
+    "POSTGRES_URL",
+    "POSTGRES_PRISMA_URL",
+    "SUPABASE_DB_URL",
+):
+    os.environ[_db_var] = ""
 os.environ["EMBEDDING_PROVIDER"] = "hash"
 os.environ["LLM_PROVIDER"] = "mock"
 os.environ["N8N_ENABLED"] = "false"
