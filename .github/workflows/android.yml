@@ -35,10 +35,13 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - uses: android-actions/setup-android@v3
-
       - name: Install SDK platform and build tools
-        run: sdkmanager "platforms;android-34" "build-tools;34.0.0"
+        # GitHub-hosted runners ship the Android SDK at $ANDROID_HOME already.
+        # android-actions/setup-android tries to install the removed legacy
+        # "tools" package and fails, so only the missing packages are added.
+        run: |
+          yes | sdkmanager --licenses > /dev/null || true
+          sdkmanager "platforms;android-34" "build-tools;34.0.0"
 
       - name: Build release APK
         working-directory: android
