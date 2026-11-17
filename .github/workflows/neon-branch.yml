@@ -1,0 +1,89 @@
+# A throwaway Neon database branch per pull request.
+#
+# Every PR gets its own copy-on-write branch of the database, so a migration or a
+# test that writes data cannot touch production. The branch is deleted when the PR
+# closes, and expires after two weeks in case a PR is abandoned.
+#
+# Required repository settings (Settings > Secrets and variables > Actions):
+#   secret  NEON_API_KEY     a real key from https://console.neon.tech/app/settings/api-keys
+#   variable NEON_PROJECT_ID the Neon project id, e.g. rough-shape-45628230
+#
+# The connection string is available as:
+#   ${{ steps.create_branch.outputs.db_url_pooled }}   (pooled, use this)
+#   ${{ steps.create_branch.outputs.db_url }}          (direct, for migrations)
+# Never log either value: it carries a database username and password.
+name: Neon Preview Branch
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, closed]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+
+permissions:
+  contents: read
+
+jobs:
+  create_neon_branch:
+    name: Create Neon branch
+    if: github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    outputs:
+      db_url_pooled: ${{ steps.create_branch.outputs.db_url_pooled }}
+    steps:
+      - name: Compute the Neon branch name
+        id: name
+        # github.head_ref is the PR source branch. Slashes and other punctuation
+        # are folded to dashes so the Neon branch stays a single flat name.
+        run: |
+          slug=$(printf '%s' "${{ github.head_ref }}" | tr '/._' '---' | tr -cd '[:alnum:]-')
+          echo "branch=preview/pr-${{ github.event.number }}-${slug}" >> "$GITHUB_OUTPUT"
+
+      - name: Get the branch expiration date (two weeks out)
+        run: echo "EXPIRES_AT=$(date -u --date '+14 days' +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_ENV"
+
+      - name: Create Neon branch
+        id: create_branch
+        uses: neondatabase/create-branch-action@v6
+        with:
+          project_id: ${{ vars.NEON_PROJECT_ID || 'rough-shape-45628230' }}
+          branch_name: ${{ steps.name.outputs.branch }}
+          api_key: ${{ secrets.NEON_API_KEY }}
+          expires_at: ${{ env.EXPIRES_AT }}
+
+      # Point the app at the preview database and check the schema applies cleanly.
+      # The action already applied sql/*.sql, so this only verifies the result.
+      - name: Check out the pull request
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Verify the preview database
+        env:
+          NEON_DATABASE_URL: ${{ steps.create_branch.outputs.db_url_pooled }}
+        run: python scripts/setup_neon.py --verify-only
+
+  delete_neon_branch:
+    name: Delete Neon branch
+    if: github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Compute the Neon branch name
+        id: name
+        run: |
+          slug=$(printf '%s' "${{ github.head_ref }}" | tr '/._' '---' | tr -cd '[:alnum:]-')
+          echo "branch=preview/pr-${{ github.event.number }}-${slug}" >> "$GITHUB_OUTPUT"
+
+      - name: Delete Neon branch
+        uses: neondatabase/delete-branch-action@v3
+        with:
+          project_id: ${{ vars.NEON_PROJECT_ID || 'rough-shape-45628230' }}
+          branch: ${{ steps.name.outputs.branch }}
+          api_key: ${{ secrets.NEON_API_KEY }}
