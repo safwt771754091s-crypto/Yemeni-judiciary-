@@ -65,25 +65,28 @@ def _neon_request(method: str, path: str, api_key: str, body: dict | None = None
         raise SystemExit(f"Neon API {method} {path} failed: HTTP {exc.code} {detail}") from exc
 
 
-def provision_neon(api_key: str, name: str, region: str | None) -> str:
-    """Return a connection string for a Neon project, creating it if needed."""
+def provision_neon(
+    api_key: str,
+    name: str,
+    region: str | None,
+    project_id: str | None = None,
+    branch_id: str | None = None,
+) -> str:
+    """Return a connection string for a Neon project, creating it if needed.
+
+    ``project_id`` (and optionally ``branch_id``) target a project that already
+    exists, which is the usual case when the database was created by hand in the
+    Neon console. Without them the project is looked up by name, then created.
+    """
+    if project_id:
+        return _connection_uri(api_key, project_id, branch_id)
+
     projects = _neon_request("GET", "/projects", api_key).get("projects", [])
     existing = next((p for p in projects if p.get("name") == name), None)
 
     if existing:
-        project_id = existing["id"]
-        print(f"  reusing Neon project '{name}' ({project_id})")
-        uri = _neon_request(
-            "GET",
-            f"/projects/{project_id}/connection_uri?database_name=neondb&role_name=neondb_owner",
-            api_key,
-        ).get("uri")
-        if not uri:
-            raise SystemExit(
-                "Neon did not return a connection URI for the existing project. "
-                "Pass --dsn instead, or rotate the role password in the Neon console."
-            )
-        return uri
+        print(f"  reusing Neon project '{name}' ({existing['id']})")
+        return _connection_uri(api_key, existing["id"], branch_id)
 
     payload: dict = {"project": {"name": name}}
     if region:
@@ -95,6 +98,27 @@ def provision_neon(api_key: str, name: str, region: str | None) -> str:
     if not uris:
         raise SystemExit("Neon created the project but returned no connection URI.")
     return uris[0]["connection_uri"]
+
+
+def _connection_uri(api_key: str, project_id: str, branch_id: str | None) -> str:
+    """Fetch the connection string for a project, preferring the pooled endpoint.
+
+    The pooler keeps a serverless host from exhausting Postgres connections, and
+    asyncpg's protocol-level prepared statements work through PgBouncer, so the
+    pooled URI is the right default for this deployment.
+    """
+    query = "database_name=neondb&role_name=neondb_owner&pooled=true"
+    if branch_id:
+        query += f"&branch_id={branch_id}"
+    uri = _neon_request(
+        "GET", f"/projects/{project_id}/connection_uri?{query}", api_key
+    ).get("uri")
+    if not uri:
+        raise SystemExit(
+            "Neon did not return a connection URI. Pass --dsn instead, or rotate "
+            "the role password in the Neon console."
+        )
+    return uri
 
 
 async def apply_schema(dsn: str) -> None:
@@ -137,6 +161,16 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Link the platform to a Postgres/Neon database")
     parser.add_argument("--dsn", help="existing postgresql:// connection string")
     parser.add_argument("--project-name", default=DEFAULT_PROJECT, help="Neon project name")
+    parser.add_argument(
+        "--project-id",
+        default=os.environ.get("NEON_PROJECT_ID") or None,
+        help="Neon project id (e.g. rough-shape-45628230); skips the name lookup",
+    )
+    parser.add_argument(
+        "--branch-id",
+        default=os.environ.get("NEON_BRANCH_ID") or None,
+        help="Neon branch id (e.g. br-lively-poetry-b745ltwg); defaults to the project's default branch",
+    )
     parser.add_argument("--region", default=None, help="Neon region id, e.g. aws-us-east-1")
     parser.add_argument("--verify-only", action="store_true", help="skip applying the schema")
     args = parser.parse_args()
@@ -154,7 +188,9 @@ def main() -> int:
             )
             return 2
         print("Provisioning Neon ...")
-        dsn = provision_neon(api_key, args.project_name, args.region)
+        dsn = provision_neon(
+            api_key, args.project_name, args.region, args.project_id, args.branch_id
+        )
 
     if not dsn.startswith(("postgres://", "postgresql://")):
         print(f"Not a Postgres DSN: {dsn[:24]}...", file=sys.stderr)
