@@ -52,8 +52,6 @@ jobs:
           api_key: ${{ secrets.NEON_API_KEY }}
           expires_at: ${{ env.EXPIRES_AT }}
 
-      # Point the app at the preview database and check the schema applies cleanly.
-      # The action already applied sql/*.sql, so this only verifies the result.
       - name: Check out the pull request
         uses: actions/checkout@v4
 
@@ -65,10 +63,14 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Verify the preview database
+      # A fresh branch starts as a copy of the default branch, so it only has the
+      # schema if the parent does. Applying sql/*.sql here is idempotent and doubles
+      # as a CI check that the SQL files apply cleanly on Postgres 16.
+      - name: Apply the schema to the preview database
         env:
-          NEON_DATABASE_URL: ${{ steps.create_branch.outputs.db_url_pooled }}
-        run: python scripts/setup_neon.py --verify-only
+          # Direct (unpooled) connection, as Neon recommends for migrations.
+          NEON_DATABASE_URL: ${{ steps.create_branch.outputs.db_url }}
+        run: python scripts/setup_neon.py --dsn "$NEON_DATABASE_URL"
 
   delete_neon_branch:
     name: Delete Neon branch
