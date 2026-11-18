@@ -161,25 +161,30 @@ def _shell_scripts() -> list[Path]:
     return sorted((ROOT / "scripts").glob("*.sh"))
 
 
-def _invocations(line: str) -> list[str]:
-    """Split a shell line into the command segments that could block.
+def _command_words(line: str) -> list[str]:
+    """The words of a shell line, with wrappers removed so the real command leads.
 
-    Leading keywords (``if``, ``!``, ``then``, ``do``) and the separators between
-    commands are stripped, so ``if ! run sudo ... ; then`` is recognised as the
-    wrapped call it is rather than as a bare ``sudo``.
+    Leading keywords (``if``, ``!``, ``then``), ``VAR=value`` assignments and a
+    ``sudo [-n] [-u user]`` prefix are stripped, so ``if ! sudo -n -u postgres
+    psql ...`` yields ``["psql", ...]`` and the check sees the command that runs.
     """
-    segments: list[str] = []
-    for part in line.replace(";", "&&").split("&&"):
-        part = part.replace("||", "&&")
-        segments.extend(piece.strip() for piece in part.split("&&") if piece.strip())
-    cleaned: list[str] = []
-    for segment in segments:
-        for keyword in ("if ", "then ", "do ", "while ", "! "):
-            while segment.startswith(keyword):
-                segment = segment[len(keyword):].lstrip()
-        if segment:
-            cleaned.append(segment)
-    return cleaned
+    text = line.strip()
+    # Leading control operators and keywords, e.g. ``|| sudo ... createdb`` or
+    # ``if ! run sudo ... ; then``.
+    for keyword in ("if ", "then ", "do ", "while ", "! ", "||", "&&", ";"):
+        while text.startswith(keyword):
+            text = text[len(keyword):].lstrip()
+    words = text.split()
+    while words and "=" in words[0] and not words[0].startswith(("-", "/")):
+        words = words[1:]
+    if words and words[0] == "sudo":
+        words = words[1:]
+        while words and words[0].startswith("-"):
+            option = words[0]
+            words = words[1:]
+            if option == "-u" and words:  # ``-u user`` takes a value
+                words = words[1:]
+    return words
 
 
 def _is_bounded(segment: str) -> bool:
@@ -199,7 +204,8 @@ def test_deploy_scripts_bound_every_blocking_command() -> None:
     An automation run timed out while a deploy script sat in a step that never
     returned. ``apt-get``, ``psql`` or ``docker`` can each block on a network that
     never answers or a lock that never clears, so every call must go through the
-    ``run``/``run_long`` helpers, which wrap it in ``timeout``.
+    ``run``/``run_long`` helpers, which wrap it in ``timeout``. A command the
+    script backgrounds with ``&`` (``dockerd``) is exempt: it returns at once.
     """
     scripts = _shell_scripts()
     assert scripts, "expected deploy scripts under scripts/"
@@ -208,23 +214,16 @@ def test_deploy_scripts_bound_every_blocking_command() -> None:
         assert "run() { timeout" in source, f"{path}: no bounded-command helper"
         for number, line in enumerate(source.splitlines(), start=1):
             stripped = line.strip()
-            if not stripped or stripped.startswith("#"):
+            if not stripped or stripped.startswith("#") or stripped.endswith("&"):
                 continue
-            for segment in _invocations(stripped):
-                for command in BLOCKING_COMMANDS:
-                    if command not in segment:
-                        continue
-                    # Safe when wrapped, mentioned in a message, or an availability check.
-                    if _is_bounded(segment):
-                        continue
-                    if "have " in segment or "command -v" in segment:
-                        continue
-                    if "die " in segment or "log " in segment or "printf" in segment:
-                        continue
-                    raise AssertionError(
-                        f"{path}:{number}: unbounded '{command}' call would hang a run: "
-                        f"{segment}"
-                    )
+            words = _command_words(stripped)
+            if not words or words[0] not in BLOCKING_COMMANDS:
+                continue
+            if _is_bounded(stripped):
+                continue
+            raise AssertionError(
+                f"{path}:{number}: unbounded '{words[0]}' call would hang a run: {stripped}"
+            )
 
 
 def test_deploy_scripts_declare_a_timeout_bound() -> None:
