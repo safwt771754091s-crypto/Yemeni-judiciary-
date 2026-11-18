@@ -104,3 +104,22 @@ def test_landing_page_defers_the_offline_index():
     html = client.get("/").text
     assert "requestIdleCallback" in html
     assert "loadIndex()" in html
+
+
+def test_landing_page_shows_the_official_owner_and_contact_details():
+    """The public front door must carry the official owner and contact channels.
+
+    The landing page is the only page a visitor sees before signing up, so the
+    person responsible for the platform and the two ways to reach them have to be
+    on it, and the links must actually dial out (``mailto:`` / ``wa.me``) rather
+    than print a string a user has to copy by hand.
+    """
+    client = TestClient(create_app())
+    html = client.get("/").text
+    assert "صفوت البريهي" in html, "the owner's name must appear on the landing page"
+    assert 'href="mailto:Safwt771754091s@gmail.com"' in html
+    assert "Safwt771754091s@gmail.com" in html
+    assert "https://wa.me/967783482882" in html, "WhatsApp must link via wa.me"
+    assert "+967 783 482 882" in html, "the number must be readable as well as linked"
+    assert 'id="contact"' in html, "the contact section must be addressable from the nav"
+    assert 'href="#contact"' in html

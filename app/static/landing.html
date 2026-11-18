@@ -167,6 +167,30 @@
   footer{border-top:1px solid var(--line);color:var(--muted);font-size:13px;padding:30px 0}
   footer .in{max-width:1160px;margin:0 auto;padding:0 22px;display:flex;gap:16px;flex-wrap:wrap;align-items:center}
   footer .sp{flex:1}
+
+  /* -- owner / contact --------------------------------------------------- */
+  .owner{display:flex;align-items:center;gap:22px;flex-wrap:wrap;
+    background:linear-gradient(135deg,var(--panel2),var(--panel));border:1px solid var(--line);
+    border-radius:20px;padding:28px}
+  .owner .avatar{width:78px;height:78px;border-radius:50%;flex:none;display:flex;
+    align-items:center;justify-content:center;font-size:25px;font-weight:800;color:#12181f;
+    background:linear-gradient(135deg,var(--gold),#a8823a);box-shadow:0 10px 30px rgba(200,162,74,.25)}
+  .owner .who{flex:1;min-width:230px}
+  .owner .who .role{color:var(--gold2);font-size:12.5px;font-weight:700;letter-spacing:.3px}
+  .owner .who b{display:block;font-size:22px;color:var(--ink);margin:3px 0 4px}
+  .owner .who p{margin:0;color:var(--muted);font-size:14px;max-width:520px}
+  .owner .ways{display:flex;gap:10px;flex-wrap:wrap}
+  .cgrid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:16px}
+  @media(max-width:760px){.cgrid{grid-template-columns:1fr}}
+  .cbox{display:flex;align-items:center;gap:15px;background:var(--panel);border:1px solid var(--line);
+    border-radius:15px;padding:18px 20px;transition:border-color .15s}
+  .cbox:hover{border-color:var(--gold)}
+  .cbox .e{font-size:27px;flex:none}
+  .cbox .tx{min-width:0}
+  .cbox b{display:block;color:var(--gold2);font-size:13px;margin-bottom:3px}
+  .cbox a{font-size:15.5px;color:var(--ink);display:inline-block;direction:ltr;word-break:break-all}
+  .cbox a:hover{color:var(--gold2);text-decoration:none}
+  .cbox .note{display:block;color:var(--muted);font-size:12px;margin-top:2px}
 </style>
 </head>
 <body>
@@ -180,6 +204,7 @@
     <a class="lnk" href="#how">كيف تعمل</a>
     <a class="lnk" href="#portals">البوابات</a>
     <a class="lnk" href="#android">تطبيق أندرويد</a>
+    <a class="lnk" href="#contact">التواصل</a>
     <a class="lnk" href="/docs">وثائق الـ API</a>
     <a class="btn gold sm" href="/ui/signup.html">إنشاء حساب</a>
     <a class="btn line sm" href="/ui/workspace.html">دخول</a>
@@ -333,18 +358,65 @@
   </div>
 </section>
 
-<footer>
-  <div class="in">
-    <div class="warn" style="flex:1;min-width:280px">⚠️ المخرجات مسودات آلية لا تُعدّ أحكاماً قضائية إلا بعد مراجعتها واعتمادها من القاضي المختص.</div>
-  </div>
-  <div class="in" style="margin-top:18px">
-    <span>منصة الذكاء الاصطناعي القانوني — الجمهورية اليمنية</span>
-    <span class="sp"></span>
-    <a href="/docs">وثائق الـ API</a>
-    <a href="/api/v1/health/ready">جاهزية النظام</a>
-    <a href="/ui/admin.html">لوحة التحكم</a>
-  </div>
-</footer>
+  <section id="contact" style="background:var(--bg2);border-block:1px solid var(--line)">
+    <div class="wrap">
+      <div class="eyebrow">الإشراف والتواصل</div>
+      <h2 class="t">إعداد وتطوير المنصة</h2>
+      <p class="sub">منصة وطنية مستقلة لإسناد العمل القضائي والقانوني في الجمهورية اليمنية، بإعداد ومتابعة مباشرة من مالك المنصة. للاستفسارات الفنية أو التعاون أو الدعم، تواصل عبر القنوات الرسمية أدناه.</p>
+
+      <div class="owner">
+        <div class="avatar">م.ص</div>
+        <div class="who">
+          <span class="role">مالك المنصة ومطوّرها</span>
+          <b>م/ صفوت البريهي</b>
+          <p>مهندس أنظمة، مسؤول التصميم والتطوير والتشغيل والإشراف على المنصة وقاعدة بياناتها القانونية.</p>
+        </div>
+        <div class="ways">
+          <a class="btn gold" href="mailto:Safwt771754091s@gmail.com">✉️ مراسلة بالبريد</a>
+          <a class="btn line" href="https://wa.me/967783482882" target="_blank" rel="noopener">💬 واتساب</a>
+        </div>
+      </div>
+
+      <div class="cgrid">
+        <div class="cbox">
+          <div class="e">✉️</div>
+          <div class="tx">
+            <b>البريد الإلكتروني</b>
+            <a href="mailto:Safwt771754091s@gmail.com">Safwt771754091s@gmail.com</a>
+            <span class="note">للاستفسارات الرسمية والدعم الفني والتعاون.</span>
+          </div>
+        </div>
+        <div class="cbox">
+          <div class="e">💬</div>
+          <div class="tx">
+            <b>واتساب — التواصل المباشر</b>
+            <a href="https://wa.me/967783482882" target="_blank" rel="noopener">+967 783 482 882</a>
+            <span class="note">متاح خلال أوقات العمل بتوقيت صنعاء.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+
+  <footer>
+    <div class="in">
+      <div class="warn" style="flex:1;min-width:280px">⚠️ المخرجات مسودات آلية لا تُعدّ أحكاماً قضائية إلا بعد مراجعتها واعتمادها من القاضي المختص.</div>
+    </div>
+    <div class="in" style="margin-top:18px">
+      <span>منصة الذكاء الاصطناعي القانوني — الجمهورية اليمنية</span>
+      <span class="sp"></span>
+      <a href="/docs">وثائق الـ API</a>
+      <a href="/api/v1/health/ready">جاهزية النظام</a>
+      <a href="/ui/admin.html">لوحة التحكم</a>
+    </div>
+    <div class="in" style="margin-top:14px">
+      <span>إعداد: <b style="color:var(--gold2)">م/ صفوت البريهي</b> — مالك المنصة</span>
+      <span class="sp"></span>
+      <a href="mailto:Safwt771754091s@gmail.com">Safwt771754091s@gmail.com</a>
+      <a href="https://wa.me/967783482882" target="_blank" rel="noopener">واتساب: ‎+967 783 482 882</a>
+    </div>
+  </footer>
 
 <script src="/ui/install.js"></script>
 <script src="/ui/statute-search.js"></script>
