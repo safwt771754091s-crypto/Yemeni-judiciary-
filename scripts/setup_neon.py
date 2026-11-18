@@ -124,7 +124,7 @@ def _connection_uri(api_key: str, project_id: str, branch_id: str | None) -> str
 async def apply_schema(dsn: str) -> None:
     import asyncpg
 
-    conn = await asyncpg.connect(dsn, timeout=30)
+    conn = await asyncpg.connect(dsn, timeout=30, command_timeout=60)
     try:
         for path in sorted(SQL_DIR.glob("*.sql")):
             await conn.execute(path.read_text(encoding="utf-8"))
@@ -136,7 +136,7 @@ async def apply_schema(dsn: str) -> None:
 async def verify(dsn: str) -> None:
     import asyncpg
 
-    conn = await asyncpg.connect(dsn, timeout=30)
+    conn = await asyncpg.connect(dsn, timeout=30, command_timeout=60)
     try:
         version = await conn.fetchval("select version()")
         has_vector = await conn.fetchval(

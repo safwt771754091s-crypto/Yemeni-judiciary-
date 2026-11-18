@@ -10,6 +10,7 @@ meant to be hermetic and fast, so two invariants are pinned here:
 """
 from __future__ import annotations
 
+import ast
 from pathlib import Path
 
 from app.core.config import settings
@@ -40,11 +41,54 @@ def test_pool_creation_passes_the_connect_timeout() -> None:
     """The pool must actually use the setting, not just declare it."""
     source = Path(Database.connect.__code__.co_filename).read_text(encoding="utf-8")
     assert "timeout=settings.db_connect_timeout" in source
+    assert "command_timeout=settings.db_command_timeout" in source
 
 
-def test_apply_sql_passes_the_connect_timeout() -> None:
-    source = (ROOT / "scripts" / "apply_sql.py").read_text(encoding="utf-8")
-    assert "timeout=settings.db_connect_timeout" in source
+def _asyncpg_connect_calls(source: str) -> list[ast.Call]:
+    """Every ``asyncpg.connect(...)`` call in a module, found structurally.
+
+    A substring check cannot tell a connect timeout from a statement timeout, and
+    that is exactly how an unbounded ``apply_sql.py`` slipped through: the guard
+    matched ``timeout=settings.db_connect_timeout`` and never noticed the missing
+    ``command_timeout``. Walking the AST makes the check see the real call.
+    """
+    tree = ast.parse(source)
+    calls: list[ast.Call] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        if (
+            isinstance(func, ast.Attribute)
+            and func.attr == "connect"
+            and isinstance(func.value, ast.Name)
+            and func.value.id == "asyncpg"
+        ):
+            calls.append(node)
+    return calls
+
+
+def test_every_direct_asyncpg_connect_is_bounded() -> None:
+    """A direct connect must set both the connect and the statement timeout.
+
+    ``timeout`` only bounds establishing the connection. Without
+    ``command_timeout`` a single stuck statement - a ``create index`` over
+    pgvector, an ``alter table`` waiting on a lock - runs until the automation
+    itself is killed. That is what timed out this repository's runs.
+    """
+    checked = 0
+    for folder in ("app", "scripts"):
+        for path in (ROOT / folder).rglob("*.py"):
+            calls = _asyncpg_connect_calls(path.read_text(encoding="utf-8"))
+            for call in calls:
+                checked += 1
+                kwargs = {kw.arg for kw in call.keywords}
+                assert "timeout" in kwargs, f"{path}: asyncpg.connect without a connect timeout"
+                assert "command_timeout" in kwargs, (
+                    f"{path}: asyncpg.connect without command_timeout - a stuck "
+                    f"statement would hang the run"
+                )
+    assert checked > 0, "expected to find at least one direct asyncpg.connect call"
 
 
 def test_docs_do_not_teach_a_blocking_command() -> None:
