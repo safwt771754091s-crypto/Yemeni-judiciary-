@@ -44,11 +44,12 @@ class UserRepository:
     # -- reads -------------------------------------------------------------
     async def get_by_username(self, username: str) -> dict[str, Any] | None:
         if self.persistent:
-            return await database.fetchrow(
+            row = await database.fetchrow(
                 f"select {_USER_COLUMNS}, password_hash from platform_users "
                 "where lower(username) = lower($1)",
                 username,
             )
+            return dict(row) if row else None
         for user in self._users.values():
             if user["username"].lower() == username.lower():
                 return dict(user)
@@ -56,11 +57,12 @@ class UserRepository:
 
     async def get_by_email(self, email: str) -> dict[str, Any] | None:
         if self.persistent:
-            return await database.fetchrow(
+            row = await database.fetchrow(
                 f"select {_USER_COLUMNS}, password_hash from platform_users "
                 "where lower(email) = lower($1)",
                 email,
             )
+            return dict(row) if row else None
         target = email.strip().lower()
         for user in self._users.values():
             if (user.get("email") or "").strip().lower() == target:
@@ -69,19 +71,21 @@ class UserRepository:
 
     async def get(self, user_id: str | uuid.UUID) -> dict[str, Any] | None:
         if self.persistent:
-            return await database.fetchrow(
+            row = await database.fetchrow(
                 f"select {_USER_COLUMNS}, password_hash from platform_users where id = $1",
                 uuid.UUID(str(user_id)),
             )
+            return dict(row) if row else None
         return dict(self._users[str(user_id)]) if str(user_id) in self._users else None
 
     async def get_by_google_sub(self, google_sub: str) -> dict[str, Any] | None:
         if self.persistent:
-            return await database.fetchrow(
+            row = await database.fetchrow(
                 f"select {_USER_COLUMNS}, password_hash from platform_users "
                 "where google_sub = $1",
                 google_sub,
             )
+            return dict(row) if row else None
         for user in self._users.values():
             if user.get("google_sub") == google_sub:
                 return dict(user)
@@ -140,12 +144,13 @@ class UserRepository:
 
     async def list_users(self, *, limit: int = 100, offset: int = 0) -> list[dict[str, Any]]:
         if self.persistent:
-            return await database.fetch(
+            rows = await database.fetch(
                 f"select {_USER_COLUMNS} from platform_users "
                 "order by created_at asc limit $1 offset $2",
                 limit,
                 offset,
             )
+            return [dict(row) for row in rows]
         rows = sorted(self._users.values(), key=lambda u: u["created_at"])
         return [{k: v for k, v in row.items() if k != "password_hash"} for row in rows[offset : offset + limit]]
 
@@ -306,11 +311,12 @@ class SectionRepository:
     async def list_sections(self, *, include_inactive: bool = True) -> list[dict[str, Any]]:
         if self.persistent:
             clause = "" if include_inactive else "where is_active = true"
-            return await database.fetch(
+            rows = await database.fetch(
                 "select id, key, title_ar, description, icon, sort_order, is_active, "
                 f"created_at, updated_at from platform_sections {clause} "
                 "order by sort_order asc, title_ar asc"
             )
+            return [dict(row) for row in rows]
         rows = sorted(self._sections.values(), key=lambda s: (s["sort_order"], s["title_ar"]))
         if not include_inactive:
             rows = [row for row in rows if row["is_active"]]
@@ -318,20 +324,22 @@ class SectionRepository:
 
     async def get(self, section_id: str | uuid.UUID) -> dict[str, Any] | None:
         if self.persistent:
-            return await database.fetchrow(
+            row = await database.fetchrow(
                 "select id, key, title_ar, description, icon, sort_order, is_active, "
                 "created_at, updated_at from platform_sections where id = $1",
                 uuid.UUID(str(section_id)),
             )
+            return dict(row) if row else None
         return dict(self._sections[str(section_id)]) if str(section_id) in self._sections else None
 
     async def get_by_key(self, key: str) -> dict[str, Any] | None:
         if self.persistent:
-            return await database.fetchrow(
+            row = await database.fetchrow(
                 "select id, key, title_ar, description, icon, sort_order, is_active, "
                 "created_at, updated_at from platform_sections where key = $1",
                 key,
             )
+            return dict(row) if row else None
         for row in self._sections.values():
             if row["key"] == key:
                 return dict(row)

@@ -8,6 +8,7 @@ from __future__ import annotations
 import httpx
 import pytest
 
+from app.core.config import settings
 from app.core.permissions import ALL_PERMISSIONS, Role, has_permission, permissions_for
 from app.core.security import decode_token, encode_token, hash_password, verify_password
 from app.db.user_repository import section_repository, user_repository
@@ -419,3 +420,112 @@ def test_insecure_default_secret_is_refused_in_production() -> None:
     # A strong secret is accepted, and the default is tolerated outside production.
     assert Settings(app_env="production", jwt_secret="a-strong-random-secret").auth_secret
     assert Settings(app_env="development").auth_secret
+
+
+# --------------------------------------------------------------------------- #
+# The Postgres row type is not a dict
+# --------------------------------------------------------------------------- #
+class _FrozenRow(dict):
+    """Stand-in for ``asyncpg.Record``: readable, but immutable.
+
+    The in-memory store hands the service plain dicts, so a repository that
+    returns the raw driver row passes every offline test and then fails in
+    production the moment a caller annotates it - which is exactly how
+    ``/api/v1/auth/users`` and ``/api/v1/admin/overview`` broke on Postgres
+    while the suite stayed green. These tests run the read paths with a frozen
+    row so that regression cannot recur.
+    """
+
+    def __setitem__(self, key: object, value: object) -> None:  # pragma: no cover
+        raise TypeError("'asyncpg.protocol.record.Record' object does not support item assignment")
+
+
+async def _fake_fetch(query: str, *args: object) -> list[_FrozenRow]:
+    return [
+        _FrozenRow(
+            id="11111111-1111-1111-1111-111111111111",
+            username="frozen",
+            email=None,
+            email_verified=False,
+            full_name="صف مُجمّد",
+            role="viewer",
+            is_active=True,
+            permissions=[],
+            last_login_at=None,
+            created_by=None,
+            created_at=None,
+            updated_at=None,
+            password_hash="pbkdf2_sha256$salt$hash",
+        )
+    ]
+
+
+async def _fake_fetchrow(query: str, *args: object) -> _FrozenRow:
+    return (await _fake_fetch(query))[0]
+
+
+async def test_list_users_survives_a_frozen_postgres_row(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``list_users`` must hand the service a mutable dict, not the driver's row."""
+    from app.db import user_repository as module
+
+    monkeypatch.setattr(type(settings), "database_enabled", property(lambda self: True))
+    monkeypatch.setattr(module.database, "fetch", _fake_fetch)
+    monkeypatch.setattr(module.database, "fetchrow", _fake_fetchrow)
+
+    users = await auth_service.list_users()
+    assert len(users) == 1
+    # The annotation is what broke before: it writes a new key onto each row.
+    assert users[0]["effective_permissions"]
+    assert users[0]["username"] == "frozen"
+
+
+async def test_admin_overview_survives_a_frozen_postgres_row(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.db import user_repository as module
+    from app.services.admin import admin_service
+
+    async def _fake_fetchval(query: str, *args: object) -> int:
+        return 0
+
+    monkeypatch.setattr(type(settings), "database_enabled", property(lambda self: True))
+    monkeypatch.setattr(module.database, "fetch", _fake_fetch)
+    monkeypatch.setattr(module.database, "fetchrow", _fake_fetchrow)
+    monkeypatch.setattr(module.database, "fetchval", _fake_fetchval)
+
+    overview = await admin_service.overview({"role": "owner", "permissions": []})
+    assert overview["users"]["total"] == 1
+    assert overview["users"]["active"] == 1
+
+
+async def test_section_reads_return_mutable_dicts(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.db import user_repository as module
+
+    async def _section_rows(query: str, *args: object) -> list[_FrozenRow]:
+        return [
+            _FrozenRow(
+                id="22222222-2222-2222-2222-222222222222",
+                key="civil",
+                title_ar="القانون المدني",
+                description=None,
+                icon=None,
+                sort_order=1,
+                is_active=True,
+                created_at=None,
+                updated_at=None,
+            )
+        ]
+
+    async def _section_row(query: str, *args: object) -> _FrozenRow:
+        return (await _section_rows(query))[0]
+
+    monkeypatch.setattr(type(settings), "database_enabled", property(lambda self: True))
+    monkeypatch.setattr(module.database, "fetch", _section_rows)
+    monkeypatch.setattr(module.database, "fetchrow", _section_row)
+
+    sections = await section_repository.list_sections()
+    assert isinstance(sections[0], dict)
+    # A caller annotating the row must not hit the frozen-record TypeError.
+    sections[0]["extra"] = True
+
+    fetched = await section_repository.get("22222222-2222-2222-2222-222222222222")
+    assert fetched is not None
+    fetched["extra"] = True
