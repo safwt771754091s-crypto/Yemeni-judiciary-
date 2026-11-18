@@ -55,3 +55,52 @@ def test_non_postgres_alias_is_ignored(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_no_url_keeps_in_memory_mode() -> None:
     assert not Settings().database_enabled
     assert Settings().database_url is None
+
+
+# A DSN pasted from a dashboard carries stray quotes or a newline, and some
+# consoles wrap it in `psql '...'`. Accepting those made the app report
+# `configured: true` while every connection failed, because `configured` is
+# what tells an operator the store is durable. Reject them instead.
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        f'"{POSTGRES}"',
+        f"'{POSTGRES}'",
+        f"  {POSTGRES}  ",
+        f"{POSTGRES}\n",
+        POSTGRES.replace("postgresql://", "postgres://"),
+    ],
+)
+def test_stray_quoting_and_whitespace_are_cleaned(
+    monkeypatch: pytest.MonkeyPatch, raw: str
+) -> None:
+    monkeypatch.setenv("NEON_DATABASE_URL", raw)
+    settings = Settings()
+    assert settings.database_url == POSTGRES
+    assert settings.database_enabled
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "postgresql://",
+        "postgresql:///neondb",
+        "psql 'postgresql://user:pw@host/db'",
+        "postgresql://user:pa[ss@host/db",
+        "https://example.com",
+        "",
+    ],
+)
+def test_unusable_values_are_rejected(monkeypatch: pytest.MonkeyPatch, raw: str) -> None:
+    monkeypatch.setenv("NEON_DATABASE_URL", raw)
+    assert not Settings().database_enabled
+
+
+def test_unusable_value_falls_through_to_the_next_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("NEON_DATABASE_URL", "postgresql://")
+    monkeypatch.setenv("DATABASE_URL", POSTGRES)
+    assert Settings().database_url == POSTGRES

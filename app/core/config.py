@@ -4,11 +4,36 @@ from __future__ import annotations
 import os
 from functools import lru_cache
 from typing import Literal
+from urllib.parse import urlsplit
 
 from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.core.permissions import Role
+
+
+def _clean_dsn(raw: str) -> str | None:
+    """Normalise a connection string pasted from a dashboard, or reject it.
+
+    Values arrive by copy-paste, so they carry stray quotes, a trailing newline,
+    or the ``psql '...'`` wrapper a console puts around the string. Each of those
+    makes ``urlsplit`` see no host, and the app then treats the database as
+    configured while every connection fails — a worse failure than having no DSN,
+    because ``configured`` is what tells an operator the store is durable. Return
+    the usable URL, or ``None`` so the next candidate name is tried.
+    """
+    value = raw.strip().strip("'\"").strip()
+    if value.startswith("postgres://"):
+        value = "postgresql://" + value[len("postgres://") :]
+    if not value.startswith("postgresql://"):
+        return None
+    try:
+        parts = urlsplit(value)
+    except ValueError:
+        return None
+    if not parts.hostname:
+        return None
+    return value
 
 
 class Settings(BaseSettings):
@@ -190,6 +215,22 @@ class Settings(BaseSettings):
     def _blank_to_none(cls, v: object) -> object:
         return None if isinstance(v, str) and not v.strip() else v
 
+    @field_validator("neon_database_url", "supabase_db_url", mode="before")
+    @classmethod
+    def _clean_database_url(cls, v: object) -> object:
+        """Reject a DSN that is present but unusable.
+
+        pydantic-settings fills these fields straight from ``NEON_DATABASE_URL``
+        and ``SUPABASE_DB_URL``, so a truncated paste would be adopted before
+        ``_adopt_platform_database_url`` runs and the app would report the store
+        as durable while every connection failed.
+        """
+        if v is None:
+            return None
+        if isinstance(v, str):
+            return _clean_dsn(v)
+        return v
+
     @model_validator(mode="after")
     def _adopt_platform_database_url(self) -> Settings:
         """Resolve the Postgres connection string from the environment.
@@ -209,8 +250,8 @@ class Settings(BaseSettings):
             "POSTGRES_PRISMA_URL",
             "SUPABASE_DB_URL",
         ):
-            value = os.environ.get(name, "").strip()
-            if value.startswith(("postgres://", "postgresql://")):
+            value = _clean_dsn(os.environ.get(name, ""))
+            if value:
                 self.neon_database_url = value
                 break
         return self
