@@ -53,6 +53,12 @@ output and was killed. Every command you run must be able to finish on its own:
   never return. Do not call them from an automated command; use `make serve` or
   `make deploy`, which background the server. `tests/test_run_safety.py` fails
   if either target loses its "never return" warning.
+- The deploy scripts (`scripts/deploy_native.sh`, `scripts/serve_public.sh`) must
+  wrap **every** external command in the `run`/`run_long` helpers, which apply
+  `timeout`. A bare `apt-get`, `psql`, `createdb`, `pg_ctlcluster` or `docker`
+  call can block on a network that never answers or a lock that never clears;
+  that is what timed out the run stuck on "Apply schema to local pgvector
+  database". `tests/test_run_safety.py` fails if a bare call returns.
 
 ## Dependabot auto-merge
 
@@ -116,6 +122,24 @@ page's shell script). `tests/test_portals_assistant.py` asserts the static
 assets are served and that `/` returns the landing page. When you add a page,
 add it to `INSTALL_PAGES` and to the static-asset list, and regenerate the
 manifest screenshots if the layout changes.
+
+## One canonical host
+
+Three Vercel projects deploy this same repository, but only the official one
+(`yemeni-judiciary.vercel.app`) has the database credentials. The other two
+answer from the in-memory store and would lose every account on a cold start, so
+`CANONICAL_HOST` names the one real host and `REDIRECT_HOSTS` lists the
+duplicates; a request that arrives under a duplicate gets a 308 to the canonical
+host, path and query preserved. `tests/test_canonical_host.py` covers it.
+
+- To retire another duplicate, append its hostname to `REDIRECT_HOSTS` (in
+  `.env`/the Vercel dashboard, or the default in `app/core/config.py`).
+- The list is a comma-separated string, not a JSON array: pydantic-settings
+  parses a `list` field as JSON and would reject `a,b`. Read it through
+  `settings.redirect_host_names`.
+- Clearing `CANONICAL_HOST` disables the redirect, which is what a self-hosted
+  install or a local run wants. A host not listed in `REDIRECT_HOSTS` is always
+  served locally, so Vercel preview URLs keep working.
 
 ## Neon tooling
 

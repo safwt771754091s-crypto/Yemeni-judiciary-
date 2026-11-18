@@ -25,38 +25,47 @@ log() { printf '\033[36m==>\033[0m %s\n' "$1"; }
 die() { printf '\033[31mخطأ:\033[0m %s\n' "$1" >&2; exit 1; }
 have() { command -v "$1" >/dev/null 2>&1; }
 
+# Every external command is bounded. An unbounded apt-get, psql or pg_ctlcluster
+# call - a package index that never answers, a lock that never clears - blocks the
+# step until the automation deadline kills the whole run with "command timed out or
+# was killed". With a bound the step fails fast and the run reports a real error.
+CMD_TIMEOUT="${CMD_TIMEOUT:-120}"
+LONG_TIMEOUT="${LONG_TIMEOUT:-600}"
+run() { timeout "$CMD_TIMEOUT" "$@"; }
+run_long() { timeout "$LONG_TIMEOUT" "$@"; }
+
 [ -x "$PY" ] || die "لا يوجد بيئة افتراضية في $PY — أنشئها أولاً: python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt"
 
 # 1. PostgreSQL + pgvector ---------------------------------------------------
 if ! have psql; then
     log "تثبيت PostgreSQL و pgvector"
-    sudo -n apt-get update -qq
-    sudo -n apt-get install -y postgresql "postgresql-${PG_VERSION}-pgvector" \
-        >/tmp/pg_install.log 2>&1 || die "فشل التثبيت — راجع /tmp/pg_install.log"
+    run_long sudo -n apt-get update -qq
+    run_long sudo -n apt-get install -y postgresql "postgresql-${PG_VERSION}-pgvector" \
+        >/tmp/pg_install.log 2>&1 || die "فشل التثبيت أو تجاوز المهلة (${LONG_TIMEOUT}ث) — راجع /tmp/pg_install.log"
 fi
 log "PostgreSQL مثبَّت"
 
 # 2. Cluster -----------------------------------------------------------------
-if ! sudo -n pg_ctlcluster "$PG_VERSION" main status >/dev/null 2>&1; then
+if ! run sudo -n pg_ctlcluster "$PG_VERSION" main status >/dev/null 2>&1; then
     log "تشغيل عنقود PostgreSQL"
-    sudo -n pg_ctlcluster "$PG_VERSION" main start >/dev/null 2>&1
+    run sudo -n pg_ctlcluster "$PG_VERSION" main start >/dev/null 2>&1
     sleep 2
 fi
-sudo -n pg_ctlcluster "$PG_VERSION" main status >/dev/null 2>&1 \
+run sudo -n pg_ctlcluster "$PG_VERSION" main status >/dev/null 2>&1 \
     || die "عنقود PostgreSQL لا يعمل"
 log "قاعدة البيانات تعمل"
 
 # 3. Role / database / extension --------------------------------------------
 log "تهيئة الدور وقاعدة البيانات"
-sudo -n -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='${DB_USER}'" \
+run sudo -n -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='${DB_USER}'" \
     | grep -q 1 \
-    || sudo -n -u postgres psql -c \
+    || run sudo -n -u postgres psql -c \
         "CREATE ROLE ${DB_USER} LOGIN PASSWORD '${DB_PASSWORD}';" >/dev/null
-sudo -n -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='${DB_NAME}'" \
+run sudo -n -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='${DB_NAME}'" \
     | grep -q 1 \
-    || sudo -n -u postgres createdb -O "${DB_USER}" "${DB_NAME}"
-sudo -n -u postgres psql -d "${DB_NAME}" -c "CREATE EXTENSION IF NOT EXISTS vector;" >/dev/null
-sudo -n -u postgres psql -d "${DB_NAME}" \
+    || run sudo -n -u postgres createdb -O "${DB_USER}" "${DB_NAME}"
+run sudo -n -u postgres psql -d "${DB_NAME}" -c "CREATE EXTENSION IF NOT EXISTS vector;" >/dev/null
+run sudo -n -u postgres psql -d "${DB_NAME}" \
     -c "GRANT ALL ON SCHEMA public TO ${DB_USER}; ALTER DATABASE ${DB_NAME} OWNER TO ${DB_USER};" \
     >/dev/null
 log "الدور وقاعدة البيانات وامتداد pgvector جاهزة"
@@ -107,18 +116,18 @@ set -a; . ./.env; set +a
 
 # 5. Schema ------------------------------------------------------------------
 log "تطبيق مخطط SQL"
-"$PY" scripts/apply_sql.py >/dev/null 2>&1 \
-    || die "فشل تطبيق مخطط SQL"
+run_long "$PY" scripts/apply_sql.py >/dev/null 2>&1 \
+    || die "فشل تطبيق مخطط SQL أو تجاوز المهلة (${LONG_TIMEOUT}ث)"
 log "المخطط جاهز"
 
 # 6. Corpus ------------------------------------------------------------------
-COUNT=$(PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" \
+COUNT=$(PGPASSWORD="$DB_PASSWORD" run psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" \
     -tAc "select count(*) from legal_articles;" 2>/dev/null | tr -d '[:space:]')
 if [ "${COUNT:-0}" = "0" ]; then
     log "فهرسة المدوّنة القانونية (قد يستغرق دقيقة)"
-    "$PY" scripts/seed_corpus.py --file app/data/corpus/yemeni_laws.json >/tmp/seed.log 2>&1 \
-        || die "فشلت الفهرسة — راجع /tmp/seed.log"
-    COUNT=$(PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" \
+    PGPASSWORD="$DB_PASSWORD" run_long "$PY" scripts/seed_corpus.py --file app/data/corpus/yemeni_laws.json >/tmp/seed.log 2>&1 \
+        || die "فشلت الفهرسة أو تجاوزت المهلة (${LONG_TIMEOUT}ث) — راجع /tmp/seed.log"
+    COUNT=$(PGPASSWORD="$DB_PASSWORD" run psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" \
         -tAc "select count(*) from legal_articles;" 2>/dev/null | tr -d '[:space:]')
 fi
 log "المدوّنة القانونية: ${COUNT:-0} مادة"

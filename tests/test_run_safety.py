@@ -11,6 +11,7 @@ meant to be hermetic and fast, so two invariants are pinned here:
 from __future__ import annotations
 
 import ast
+import re
 from pathlib import Path
 
 from app.core.config import settings
@@ -149,3 +150,85 @@ def test_makefile_warns_about_foreground_servers() -> None:
             "a Makefile target starts the server in the foreground without a "
             "'never return' warning on its line: " + header
         )
+
+
+#: External commands a deploy script runs that can block forever on a bad network
+#: or a stuck daemon. ``timeout`` around each one turns a hang into a fast failure.
+BLOCKING_COMMANDS = ("apt-get", "psql", "createdb", "pg_ctlcluster", "docker")
+
+
+def _shell_scripts() -> list[Path]:
+    return sorted((ROOT / "scripts").glob("*.sh"))
+
+
+def _command_words(line: str) -> list[str]:
+    """The words of a shell line, with wrappers removed so the real command leads.
+
+    Leading keywords (``if``, ``!``, ``then``), ``VAR=value`` assignments and a
+    ``sudo [-n] [-u user]`` prefix are stripped, so ``if ! sudo -n -u postgres
+    psql ...`` yields ``["psql", ...]`` and the check sees the command that runs.
+    """
+    text = line.strip()
+    # Leading control operators and keywords, e.g. ``|| sudo ... createdb`` or
+    # ``if ! run sudo ... ; then``.
+    for keyword in ("if ", "then ", "do ", "while ", "! ", "||", "&&", ";"):
+        while text.startswith(keyword):
+            text = text[len(keyword):].lstrip()
+    words = text.split()
+    while words and "=" in words[0] and not words[0].startswith(("-", "/")):
+        words = words[1:]
+    if words and words[0] == "sudo":
+        words = words[1:]
+        while words and words[0].startswith("-"):
+            option = words[0]
+            words = words[1:]
+            if option == "-u" and words:  # ``-u user`` takes a value
+                words = words[1:]
+    return words
+
+
+def _is_bounded(segment: str) -> bool:
+    """True when the segment runs its command through the ``timeout`` helpers.
+
+    ``run``/``run_long``/``timeout`` are matched as whole words, so they count
+    whether they lead the command (``run sudo ...``), follow an assignment
+    (``PGPASSWORD=x run psql ...``) or sit inside a command substitution
+    (``$(run docker port ...)``).
+    """
+    return re.search(r"(?<![\w-])(run|run_long|timeout)(?![\w-])", segment) is not None
+
+
+def test_deploy_scripts_bound_every_blocking_command() -> None:
+    """A deploy script must not run an unbounded external command.
+
+    An automation run timed out while a deploy script sat in a step that never
+    returned. ``apt-get``, ``psql`` or ``docker`` can each block on a network that
+    never answers or a lock that never clears, so every call must go through the
+    ``run``/``run_long`` helpers, which wrap it in ``timeout``. A command the
+    script backgrounds with ``&`` (``dockerd``) is exempt: it returns at once.
+    """
+    scripts = _shell_scripts()
+    assert scripts, "expected deploy scripts under scripts/"
+    for path in scripts:
+        source = path.read_text(encoding="utf-8")
+        assert "run() { timeout" in source, f"{path}: no bounded-command helper"
+        for number, line in enumerate(source.splitlines(), start=1):
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#") or stripped.endswith("&"):
+                continue
+            words = _command_words(stripped)
+            if not words or words[0] not in BLOCKING_COMMANDS:
+                continue
+            if _is_bounded(stripped):
+                continue
+            raise AssertionError(
+                f"{path}:{number}: unbounded '{words[0]}' call would hang a run: {stripped}"
+            )
+
+
+def test_deploy_scripts_declare_a_timeout_bound() -> None:
+    """The bound must be a named, overridable value, not a magic number inline."""
+    for path in _shell_scripts():
+        source = path.read_text(encoding="utf-8")
+        assert "CMD_TIMEOUT=" in source, f"{path}: no short-command timeout declared"
+        assert "LONG_TIMEOUT=" in source, f"{path}: no long-command timeout declared"

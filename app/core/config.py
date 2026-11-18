@@ -166,6 +166,25 @@ class Settings(BaseSettings):
     #: Public base URL used to build the links inside outgoing mail. Falls back
     #: to the request's own origin when unset.
     app_base_url: str | None = None
+
+    # --- canonical host ---
+    #: The one hostname the platform answers on. Every request that arrives under a
+    #: different name is answered with a permanent redirect to this one, so a stale
+    #: preview or a duplicate Vercel project cannot quietly serve a second, diverging
+    #: copy of the app (a duplicate without NEON_DATABASE_URL would run on the
+    #: in-memory store and silently lose every account).
+    #:
+    #: The default is the official deployment so the duplicates are retired on the
+    #: next deploy without anyone having to reach the Vercel dashboard. Override it
+    #: (or clear it) with CANONICAL_HOST for a self-hosted or preview deployment.
+    canonical_host: str | None = "yemeni-judiciary.vercel.app"
+    #: Extra hostnames that must redirect to ``canonical_host``. Listed explicitly so
+    #: a Vercel preview URL - a different host every time - keeps working. Stored as
+    #: a comma-separated string because pydantic-settings parses a list field as
+    #: JSON, which would reject the natural ``a,b`` form; read it through
+    #: :attr:`redirect_host_names`.
+    redirect_hosts: str = "yemeni-judiciary-j5et.vercel.app,yemeni-judiciary-ii94.vercel.app"
+
     #: Allow signing in with the email address as well as the username.
     allow_email_login: bool = True
     #: Whether a new self-service account must confirm its email before the
@@ -202,6 +221,7 @@ class Settings(BaseSettings):
         "n8n_hmac_secret",
         "owner_email",
         "app_base_url",
+        "canonical_host",
         "smtp_host",
         "smtp_username",
         "smtp_password",
@@ -268,6 +288,15 @@ class Settings(BaseSettings):
     @property
     def database_enabled(self) -> bool:
         return bool(self.database_url)
+
+    @property
+    def redirect_host_names(self) -> set[str]:
+        """The duplicate hosts to redirect away from, lowercased for lookup."""
+        return {
+            part.strip().lower()
+            for part in self.redirect_hosts.split(",")
+            if part.strip()
+        }
 
     @property
     def is_production(self) -> bool:
