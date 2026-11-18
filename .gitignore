@@ -36,3 +36,4 @@ android/release.keystore
 android/*.keystore
 android/keystore.properties
 .neon-dsn.local
+.neon-backup-*.json.gz
