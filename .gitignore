@@ -35,3 +35,4 @@ android/.idea/
 android/release.keystore
 android/*.keystore
 android/keystore.properties
+.neon-dsn.local
