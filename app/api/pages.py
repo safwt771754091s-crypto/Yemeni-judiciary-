@@ -77,6 +77,59 @@ def clear_session_cookie(response: Response) -> None:
     response.delete_cookie(SESSION_COOKIE, path="/")
 
 
+def _host_without_port(request: Request) -> str:
+    """The request's public hostname, lowercased and without any port.
+
+    Behind Vercel's proxy the ``Host`` header can be rewritten to an internal
+    name, so ``X-Forwarded-Host`` - which preserves the name the caller used - is
+    preferred when present.
+    """
+    host = request.headers.get("x-forwarded-host") or request.headers.get("host", "")
+    # X-Forwarded-Host may carry a comma-separated chain; the first entry is the client's.
+    host = host.split(",", 1)[0]
+    return host.split(":", 1)[0].strip().lower()
+
+
+def _redirect_target(request: Request) -> str | None:
+    """The canonical URL this request must move to, or ``None`` to serve it here.
+
+    Only hosts named in ``redirect_hosts`` are redirected, so a preview deployment
+    or a local run keeps working. The path and query string are preserved, and the
+    caller's method and body survive because the redirect is a 308.
+    """
+    if not settings.canonical_host:
+        return None
+    host = _host_without_port(request)
+    if not host or host == settings.canonical_host.strip().lower():
+        return None
+    if host not in settings.redirect_host_names:
+        return None
+    query = request.url.query
+    suffix = f"?{query}" if query else ""
+    return f"https://{settings.canonical_host}{request.url.path}{suffix}"
+
+
+async def canonical_host_redirect(request: Request, call_next):
+    """Send a request that arrived under a duplicate hostname to the canonical one.
+
+    Duplicate Vercel projects deploy the same code but carry no database
+    credentials, so they would answer from the in-memory store and lose every
+    account on each cold start. Redirecting them keeps a single authoritative
+    deployment instead of two silently diverging ones.
+    """
+    if request.method == "OPTIONS":
+        # A CORS preflight must be answered here; a redirect would fail the check.
+        return await call_next(request)
+    target = _redirect_target(request)
+    if target is None:
+        return await call_next(request)
+    logger.info(
+        "redirecting duplicate host",
+        extra={"from": _host_without_port(request), "to": settings.canonical_host},
+    )
+    return RedirectResponse(target, status_code=308)
+
+
 async def page_gate(request: Request, call_next):
     """Deny a gated page before the static mount can serve it."""
     path = request.url.path

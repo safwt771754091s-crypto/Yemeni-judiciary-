@@ -13,7 +13,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from app.api.pages import page_gate
+from app.api.pages import canonical_host_redirect, page_gate
 from app.api.v1.router import api_router
 from app.core.config import settings
 from app.core.errors import register_exception_handlers
@@ -200,6 +200,11 @@ def create_app() -> FastAPI:
     # checked before the static mount can serve it, so a direct URL cannot
     # bypass the role's permissions.
     app.middleware("http")(page_gate)
+
+    # A duplicate deployment (same code, no database) must not serve a second
+    # copy of the app. Registered last so it runs first and the redirect happens
+    # before any page or asset work.
+    app.middleware("http")(canonical_host_redirect)
 
     register_exception_handlers(app)
     app.include_router(api_router, prefix=settings.api_prefix)
