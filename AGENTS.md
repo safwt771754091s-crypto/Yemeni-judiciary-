@@ -44,6 +44,11 @@ output and was killed. Every command you run must be able to finish on its own:
 - `pytest.ini` sets a 120s per-test timeout (`pytest-timeout`) and
   `tests/conftest.py` sets a 10s default socket timeout. Keep both. If you add a
   dependency that opens connections, give it an explicit timeout.
+- A direct `asyncpg.connect(...)` must pass **both** `timeout` (establishing the
+  connection) and `command_timeout` (each statement). `timeout` alone leaves a
+  stuck `create index` or a lock-waiting `alter table` running forever, which is
+  what killed the runs; the pool already sets both. `tests/test_run_safety.py`
+  walks the AST of every `asyncpg.connect` call and fails if either is missing.
 - The Makefile's `dev` and `run` targets start the server in the foreground and
   never return. Do not call them from an automated command; use `make serve` or
   `make deploy`, which background the server. `tests/test_run_safety.py` fails

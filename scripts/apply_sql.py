@@ -37,7 +37,9 @@ async def apply(files: list[Path]) -> int:
         return 2
 
     conn = await asyncpg.connect(
-        settings.database_url, timeout=settings.db_connect_timeout
+        settings.database_url,
+        timeout=settings.db_connect_timeout,
+        command_timeout=settings.db_command_timeout,
     )
     try:
         for path in files:
