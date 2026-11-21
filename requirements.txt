@@ -1,14 +1,14 @@
 # ---------------------------------------------------------------------------
 # Core runtime (required for the API + RAG engine to run)
 # ---------------------------------------------------------------------------
-fastapi==0.162.5
+fastapi==0.165.0
 uvicorn[standard]==0.54.0
 pydantic==2.14.3
-pydantic-settings==2.16.2
-python-multipart==0.0.33
+pydantic-settings==2.16.3
+python-multipart==0.0.34
 httpx==0.28.1
 asyncpg==0.32.0
-numpy==2.5.4
+numpy==2.5.5
 python-dotenv==1.2.4
 tenacity==9.2.1
 pdfplumber==0.11.10
@@ -33,14 +33,14 @@ python-docx==1.2.0
 # openai is capped below 3.x: llama-index-llms-openai requires openai<3, so a
 # 3.x bump is unresolvable until that package widens the range.
 # ---------------------------------------------------------------------------
-langchain-core==1.8.0
+langchain-core==1.8.3
 langchain-text-splitters==1.1.3
-langchain-openai==1.7.4
-langchain-anthropic==1.7.10
-llama-index-core==0.14.25
-llama-index-vector-stores-postgres==0.9.0
-llama-index-embeddings-openai==0.7.0
-llama-index-llms-openai==0.8.4
+langchain-openai==1.8.2
+langchain-anthropic==1.7.11
+llama-index-core==0.14.26
+llama-index-vector-stores-postgres==0.10.0
+llama-index-embeddings-openai==0.8.0
+llama-index-llms-openai==0.9.0
 openai==2.54.0
-anthropic==2.8.0
+anthropic==2.10.0
 tiktoken==0.14.0
